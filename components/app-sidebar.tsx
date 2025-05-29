@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
 import {
   BookOpenIcon,
   CalendarIcon,
@@ -15,6 +16,10 @@ import {
   PlusIcon,
   LogOutIcon,
   GraduationCapIcon,
+  Loader2,
+  SunIcon,
+  MoonIcon,
+  LaptopIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -30,6 +35,14 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase/client"
+import { CreatePostDialog } from "@/components/create-post-dialog"
+import { SearchDialog } from "@/components/search-dialog"
+import { NotificationsPopover } from "@/components/notifications-popover"
+import { useTheme } from "next-themes"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 const navigationItems = [
   {
@@ -46,13 +59,13 @@ const navigationItems = [
     title: "Friends",
     url: "/friends",
     icon: UsersIcon,
-    badge: "3",
+    badge: "friendRequests",
   },
   {
     title: "Messages",
     url: "/messages",
     icon: MessageSquareIcon,
-    badge: "2",
+    badge: "unreadMessages",
   },
   {
     title: "Events",
@@ -66,132 +79,256 @@ const navigationItems = [
   },
 ]
 
-const quickActions = [
-  {
-    title: "Create Post",
-    icon: PlusIcon,
-    action: () => alert("Create post modal would open here! ✨"),
-  },
-  {
-    title: "Search",
-    icon: SearchIcon,
-    action: () => alert("Search modal would open here! 🔍"),
-  },
-  {
-    title: "Notifications",
-    icon: BellIcon,
-    badge: "5",
-    action: () => alert("Notifications panel would open here! 🔔"),
-  },
-]
-
 export function AppSidebar() {
   const pathname = usePathname()
+  const { user, profile, signOut } = useAuth()
+  const { setTheme } = useTheme()
+
+  const [badges, setBadges] = useState({
+    friendRequests: 0,
+    unreadMessages: 0,
+    notifications: 0,
+  })
+  const [createPostOpen, setCreatePostOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
+
+  const [loadingSignOut, setLoadingSignOut] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+
+    const fetchBadgeData = async (type: keyof typeof badges) => {
+      let query
+      switch (type) {
+        case "friendRequests":
+          query = supabase
+            .from("friendships")
+            .select("*", { count: "exact", head: true })
+            .eq("friend_id", user.id)
+            .eq("status", "pending")
+          break
+        case "unreadMessages":
+          query = supabase
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("receiver_id", user.id)
+            .eq("read", false)
+          break
+        case "notifications":
+          query = supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("read", false)
+          break
+        default:
+          return
+      }
+      const { count } = await query
+      setBadges((prev) => ({ ...prev, [type]: count || 0 }))
+    }
+
+    fetchBadgeData("friendRequests")
+    fetchBadgeData("unreadMessages")
+    fetchBadgeData("notifications")
+
+    const channels = supabase
+      .channel("realtime-badges")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friendships", filter: `friend_id=eq.${user.id}` },
+        () => fetchBadgeData("friendRequests"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${user.id}` },
+        () => fetchBadgeData("unreadMessages"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        () => fetchBadgeData("notifications"),
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channels)
+    }
+  }, [user])
+
+  const handleSignOut = async () => {
+    setLoadingSignOut(true)
+    await signOut()
+    setLoadingSignOut(false)
+  }
+
+  if (pathname === "/login" || pathname === "/signup") {
+    return null
+  }
 
   return (
-    <Sidebar variant="inset" className="border-r-0">
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-4 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-600">
-            <GraduationCapIcon className="h-4 w-4 text-white" />
+    <>
+      <Sidebar variant="inset" className="border-r-0">
+        <SidebarHeader className="border-b border-sidebar-border">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-600">
+              <GraduationCapIcon className="h-4 w-4 text-white" />
+            </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">CampusConnect</span>
+              <span className="truncate text-xs text-sidebar-foreground/70">Student Social Network</span>
+            </div>
           </div>
-          <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-semibold">CampusConnect</span>
-            <span className="truncate text-xs text-sidebar-foreground/70">Student Social Network</span>
-          </div>
-        </div>
-      </SidebarHeader>
+        </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={pathname === item.url}>
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                      {item.badge && (
-                        <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </Link>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {navigationItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={pathname === item.url}>
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                        {item.badge && badges[item.badge as keyof typeof badges] > 0 && (
+                          <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
+                            {badges[item.badge as keyof typeof badges]}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setCreatePostOpen(true)}>
+                    <PlusIcon className="h-4 w-4" />
+                    <span>Create Post</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {quickActions.map((action) => (
-                <SidebarMenuItem key={action.title}>
-                  <SidebarMenuButton onClick={action.action}>
-                    <action.icon className="h-4 w-4" />
-                    <span>{action.title}</span>
-                    {action.badge && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setSearchOpen(true)}>
+                    <SearchIcon className="h-4 w-4" />
+                    <span>Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setIsNotificationsPopoverOpen(true)}
+                    id="notifications-trigger-sidebar"
+                  >
+                    <BellIcon className="h-4 w-4" />
+                    <span>Notifications</span>
+                    {badges.notifications > 0 && (
                       <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
-                        {action.badge}
+                        {badges.notifications}
                       </Badge>
                     )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/settings"}>
-                  <Link href="/settings">
-                    <SettingsIcon className="h-4 w-4" />
-                    <span>Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Account</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === "/settings"}>
+                    <Link href="/settings">
+                      <SettingsIcon className="h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-3 px-2 py-1.5">
-              <div className="relative">
-                <img
-                  src="/placeholder.svg?height=32&width=32&query=student profile"
-                  alt="Profile"
-                  className="h-8 w-8 rounded-full object-cover"
-                />
-                <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-sidebar-background" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Michael Turner</span>
-                <span className="truncate text-xs text-sidebar-foreground/70">@michael_t</span>
-              </div>
-            </div>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => alert("Logout functionality would be implemented here! 👋")}>
-              <LogOutIcon className="h-4 w-4" />
-              <span>Sign Out</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+        <SidebarFooter className="border-t border-sidebar-border">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-start px-2 py-1.5 h-auto">
+                    <SunIcon className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <MoonIcon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <span className="ml-2">Toggle Theme</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" className="mb-1">
+                  <DropdownMenuItem onClick={() => setTheme("light")}>
+                    <SunIcon className="mr-2 h-4 w-4" />
+                    Light
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("dark")}>
+                    <MoonIcon className="mr-2 h-4 w-4" />
+                    Dark
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("system")}>
+                    <LaptopIcon className="mr-2 h-4 w-4" />
+                    System
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              {profile ? (
+                <div className="flex items-center gap-3 px-2 py-1.5">
+                  <div className="relative">
+                    <img
+                      src={profile.avatar_url || "/placeholder.svg?height=32&width=32&query=student profile"}
+                      alt={profile.full_name || "User profile"}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                    <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-sidebar-background" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">{profile.full_name || "Campus User"}</span>
+                    <span className="truncate text-xs text-sidebar-foreground/70">@{profile.username || "user"}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-2 py-1.5 h-[44px]">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Loading user...</span>
+                </div>
+              )}
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleSignOut} disabled={loadingSignOut}>
+                {loadingSignOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOutIcon className="h-4 w-4" />}
+                <span>Sign Out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
 
-      <SidebarRail />
-    </Sidebar>
+      <CreatePostDialog open={createPostOpen} onOpenChange={setCreatePostOpen} />
+      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      {/* Pass a function to control the popover state for Notifications */}
+      <NotificationsPopover
+        open={isNotificationsPopoverOpen}
+        onOpenChange={setIsNotificationsPopoverOpen}
+        triggerElement={
+          typeof document !== "undefined" ? document.getElementById("notifications-trigger-sidebar") : null
+        }
+      />
+    </>
   )
 }

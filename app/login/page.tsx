@@ -1,25 +1,43 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const { signIn } = useAuth()
+  const { toast } = useToast()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, this would authenticate the user
-    alert("Login successful! 🎉")
-    window.location.href = "/"
+    setLoading(true)
+
+    try {
+      await signIn(email, password)
+      toast({
+        title: "Welcome back! 🎉",
+        description: "You've successfully logged in.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign in",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -62,6 +80,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -74,6 +93,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={loading}
                 />
                 <Button
                   type="button"
@@ -81,6 +101,7 @@ export default function LoginPage() {
                   size="icon"
                   className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </Button>
@@ -88,7 +109,7 @@ export default function LoginPage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <input type="checkbox" id="remember" className="rounded" />
+                <input type="checkbox" id="remember" className="rounded" disabled={loading} />
                 <Label htmlFor="remember" className="text-sm">
                   Remember me
                 </Label>
@@ -102,8 +123,16 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              disabled={loading}
             >
-              Sign In 🚀
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In 🚀"
+              )}
             </Button>
             <div className="text-center text-sm">
               {"Don't have an account? "}

@@ -3,6 +3,8 @@ import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { AuthProvider } from "@/contexts/auth-context"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function RootLayout({
   children,
@@ -13,10 +15,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <SidebarProvider>
-            <AppSidebar />
-            <main className="flex-1">{children}</main>
-          </SidebarProvider>
+          <AuthProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <main className="flex-1">{children}</main>
+            </SidebarProvider>
+          </AuthProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

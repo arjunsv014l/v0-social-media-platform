@@ -1,40 +1,30 @@
 "use client"
-
-import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { CalendarIcon, ImageIcon, MapPinIcon, SmileIcon } from "lucide-react"
-import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/contexts/auth-context"
+import { CreatePostDialog } from "@/components/create-post-dialog"
 
 export default function NewPostCard() {
-  const [post, setPost] = useState("")
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // In a real app, this would send the post to the server
-    alert(`Post submitted: ${post}`)
-    setPost("")
-  }
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const { profile } = useAuth()
 
   return (
-    <Card>
-      <form onSubmit={handleSubmit}>
+    <>
+      <Card>
         <CardContent className="p-4">
           <div className="flex gap-4">
             <img
-              src="/placeholder.svg?height=40&width=40&query=student profile"
+              src={profile?.avatar_url || "/placeholder.svg?height=40&width=40&query=student profile"}
               alt="Your profile"
               className="h-10 w-10 rounded-full"
             />
-            <Textarea
-              placeholder="What's happening on campus?"
-              className="flex-1 resize-none border-none bg-transparent p-0 focus-visible:ring-0"
-              value={post}
-              onChange={(e) => setPost(e.target.value)}
-              rows={3}
-            />
+            <div className="flex-1 cursor-pointer" onClick={() => setDialogOpen(true)}>
+              <div className="rounded-lg border px-3 py-2 text-muted-foreground hover:bg-accent">
+                What's happening on campus?
+              </div>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex justify-between border-t p-4">
@@ -56,11 +46,12 @@ export default function NewPostCard() {
               <span className="sr-only">Add emoji</span>
             </Button>
           </div>
-          <Button type="submit" className="rounded-full" disabled={!post.trim()}>
+          <Button className="rounded-full" onClick={() => setDialogOpen(true)}>
             Post
           </Button>
         </CardFooter>
-      </form>
-    </Card>
+      </Card>
+      <CreatePostDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+    </>
   )
 }

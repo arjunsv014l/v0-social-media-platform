@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,10 +8,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -22,12 +24,28 @@ export default function SignupPage() {
     major: "",
     graduationYear: "",
   })
+  const { signUp } = useAuth()
+  const { toast } = useToast()
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, this would create the user account
-    alert("Account created successfully! Welcome to CampusConnect! 🎉")
-    window.location.href = "/"
+    setLoading(true)
+
+    try {
+      await signUp(formData.email, formData.password, formData)
+      toast({
+        title: "Welcome to CampusConnect! 🎉",
+        description: "Your account has been created successfully.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -70,6 +88,7 @@ export default function SignupPage() {
                   value={formData.firstName}
                   onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
@@ -80,6 +99,7 @@ export default function SignupPage() {
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -92,11 +112,12 @@ export default function SignupPage() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="university">University</Label>
-              <Select onValueChange={(value) => setFormData({ ...formData, university: value })}>
+              <Select onValueChange={(value) => setFormData({ ...formData, university: value })} disabled={loading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select your university" />
                 </SelectTrigger>
@@ -112,7 +133,7 @@ export default function SignupPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="major">Major</Label>
-                <Select onValueChange={(value) => setFormData({ ...formData, major: value })}>
+                <Select onValueChange={(value) => setFormData({ ...formData, major: value })} disabled={loading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Major" />
                   </SelectTrigger>
@@ -127,7 +148,10 @@ export default function SignupPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="year">Graduation Year</Label>
-                <Select onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}>
+                <Select
+                  onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}
+                  disabled={loading}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Year" />
                   </SelectTrigger>
@@ -151,6 +175,7 @@ export default function SignupPage() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
+                  disabled={loading}
                 />
                 <Button
                   type="button"
@@ -158,6 +183,7 @@ export default function SignupPage() {
                   size="icon"
                   className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </Button>
@@ -168,8 +194,16 @@ export default function SignupPage() {
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700"
+              disabled={loading}
             >
-              Create Account ✨
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                "Create Account ✨"
+              )}
             </Button>
             <div className="text-center text-sm">
               Already have an account?{" "}
