@@ -16,6 +16,7 @@ export interface Database {
           university: string | null
           created_at: string
           updated_at: string
+          is_profile_complete: boolean // Added field
         }
         Insert: {
           id: string
@@ -29,6 +30,7 @@ export interface Database {
           university?: string | null
           created_at?: string
           updated_at?: string
+          is_profile_complete?: boolean // Added field
         }
         Update: {
           id?: string
@@ -42,6 +44,7 @@ export interface Database {
           university?: string | null
           created_at?: string
           updated_at?: string
+          is_profile_complete?: boolean // Added field
         }
       }
       posts: {
@@ -315,7 +318,7 @@ export interface PostWithAuthor {
   comments_count: number
   shares_count: number
   created_at: string
-  author: Profile | null // Can be null if author profile is not found or join fails
+  author: Profile | null
 }
 
 export interface Profile {
@@ -330,13 +333,14 @@ export interface Profile {
   university?: string | null
   created_at: string
   updated_at: string
+  is_profile_complete: boolean // Added field
 }
 
 export interface Event {
   id: string
   title: string
   description: string
-  date: string // Consider using Date type if appropriate for your queries
+  date: string
   time: string
   location: string
   category: string
