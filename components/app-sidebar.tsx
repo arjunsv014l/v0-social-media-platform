@@ -91,7 +91,6 @@ export function AppSidebar() {
   })
   const [createPostOpen, setCreatePostOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
 
   const [loadingSignOut, setLoadingSignOut] = useState(false)
@@ -135,7 +134,7 @@ export function AppSidebar() {
     fetchBadgeData("notifications")
 
     const channels = supabase
-      .channel("realtime-badges")
+      .channel(`realtime-badges-${user.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "friendships", filter: `friend_id=eq.${user.id}` },
@@ -149,7 +148,13 @@ export function AppSidebar() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        () => fetchBadgeData("notifications"),
+        (payload) => {
+          if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new.read === false)) {
+            fetchBadgeData("notifications")
+          } else if (payload.eventType === "UPDATE" && payload.new.read === true) {
+            fetchBadgeData("notifications")
+          }
+        },
       )
       .subscribe()
 
@@ -224,18 +229,17 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => setIsNotificationsPopoverOpen(true)}
-                    id="notifications-trigger-sidebar"
-                  >
-                    <BellIcon className="h-4 w-4" />
-                    <span>Notifications</span>
-                    {badges.notifications > 0 && (
-                      <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
-                        {badges.notifications}
-                      </Badge>
-                    )}
-                  </SidebarMenuButton>
+                  <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
+                    <SidebarMenuButton>
+                      <BellIcon className="h-4 w-4" />
+                      <span>Notifications</span>
+                      {badges.notifications > 0 && (
+                        <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
+                          {badges.notifications}
+                        </Badge>
+                      )}
+                    </SidebarMenuButton>
+                  </NotificationsPopover>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
@@ -263,13 +267,17 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-start px-2 py-1.5 h-auto">
-                    <SunIcon className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <MoonIcon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  <Button variant="ghost" className="w-full justify-start px-2 py-1.5 h-auto text-sm">
+                    <SunIcon className="h-[1.1rem] w-[1.1rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <MoonIcon className="absolute h-[1.1rem] w-[1.1rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                     <span className="ml-2">Toggle Theme</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" className="mb-1">
+                <DropdownMenuContent
+                  align="end"
+                  side="top"
+                  className="mb-1 w-[calc(var(--sidebar-width)_-_var(--sidebar-spacing-horizontal)_*_2)] sm:w-auto"
+                >
                   <DropdownMenuItem onClick={() => setTheme("light")}>
                     <SunIcon className="mr-2 h-4 w-4" />
                     Light
@@ -321,14 +329,6 @@ export function AppSidebar() {
 
       <CreatePostDialog open={createPostOpen} onOpenChange={setCreatePostOpen} />
       <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
-      {/* Pass a function to control the popover state for Notifications */}
-      <NotificationsPopover
-        open={isNotificationsPopoverOpen}
-        onOpenChange={setIsNotificationsPopoverOpen}
-        triggerElement={
-          typeof document !== "undefined" ? document.getElementById("notifications-trigger-sidebar") : null
-        }
-      />
     </>
   )
 }

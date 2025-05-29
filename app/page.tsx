@@ -1,4 +1,4 @@
-"use client" // Make this a client component to manage dialog states
+"use client"
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,23 +10,20 @@ import TrendingSidebar from "@/components/trending-sidebar"
 import { useAuth } from "@/contexts/auth-context"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase/client"
-import type { PostWithAuthor } from "@/lib/supabase/types" // Assuming you have this type
+import type { PostWithAuthor } from "@/lib/supabase/types"
 
-// Dialogs and Popovers that were in AppSidebar, now potentially controlled here or via AppSidebar's context
 import { CreatePostDialog } from "@/components/create-post-dialog"
 import { SearchDialog } from "@/components/search-dialog"
-import { NotificationsPopover } from "@/components/notifications-popover"
+import { NotificationsPopover } from "@/components/notifications-popover" // Updated import
 
 export default function Home() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth() // Added profile here
   const [posts, setPosts] = useState<PostWithAuthor[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
 
-  // States for dialogs/popovers triggered from header
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const [notificationsAnchor, setNotificationsAnchor] = useState<HTMLElement | null>(null)
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false) // State for popover
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -53,21 +50,19 @@ export default function Home() {
 
     fetchPosts()
 
-    // Real-time subscription for new posts
     const postChannel = supabase
-      .channel("realtime-posts")
+      .channel("realtime-posts-home")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
-        // Fetch the new post with author info
         const fetchNewPost = async () => {
-          const { data: newPost, error: newPostError } = await supabase
+          const { data: newPostData, error: newPostError } = await supabase
             .from("posts")
             .select(`*, author:profiles!user_id(*)`)
             .eq("id", payload.new.id)
             .single()
           if (newPostError) {
             console.error("Error fetching new post:", newPostError)
-          } else if (newPost) {
-            setPosts((currentPosts) => [newPost as PostWithAuthor, ...currentPosts])
+          } else if (newPostData) {
+            setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
           }
         }
         fetchNewPost()
@@ -79,7 +74,8 @@ export default function Home() {
     }
   }, [])
 
-  if (authLoading) {
+  if (authLoading && !user) {
+    // Show loader only if auth is loading AND user is not yet available
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -104,66 +100,71 @@ export default function Home() {
             type="search"
             placeholder="Search posts, people, events..."
             className="h-9 w-64 rounded-full border border-input bg-background pl-8 pr-4 text-sm focus:outline-none"
-            onFocus={() => setIsSearchOpen(true)} // Open dialog on focus
-            readOnly // To prevent typing directly if search is a dialog
+            onFocus={() => setIsSearchOpen(true)}
+            readOnly
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" onClick={() => setIsSearchOpen(true)}>
-            <SearchIcon className="h-5 w-5 md:hidden" />
+          <Button size="icon" variant="ghost" onClick={() => setIsSearchOpen(true)} className="md:hidden">
+            <SearchIcon className="h-5 w-5" />
             <span className="sr-only">Search</span>
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="relative"
-            onClick={(e) => {
-              setNotificationsAnchor(e.currentTarget)
-              setIsNotificationsOpen(true)
-            }}
-            id="notifications-trigger-header"
-          >
-            <BellIcon className="h-5 w-5" />
-            {/* Badge count can be fetched here or from a context if needed globally in header */}
-            {/* <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-xs text-white flex items-center justify-center">3</span> */}
-            <span className="sr-only">Notifications</span>
-          </Button>
-          <Link href="/messages">
-            <Button size="icon" variant="ghost" className="relative">
-              <MessageSquareIcon className="h-5 w-5" />
-              {/* Badge count can be fetched here or from a context */}
-              {/* <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-500 text-xs text-white flex items-center justify-center">2</span> */}
-              <span className="sr-only">Messages</span>
+
+          {user && ( // Only show notifications if user is logged in
+            <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="relative"
+                // onClick is handled by PopoverTrigger now
+              >
+                <BellIcon className="h-5 w-5" />
+                {/* Badge count can be fetched here or from a context if needed globally in header */}
+                <span className="sr-only">Notifications</span>
+              </Button>
+            </NotificationsPopover>
+          )}
+
+          {user && ( // Only show messages link if user is logged in
+            <Link href="/messages">
+              <Button size="icon" variant="ghost" className="relative">
+                <MessageSquareIcon className="h-5 w-5" />
+                <span className="sr-only">Messages</span>
+              </Button>
+            </Link>
+          )}
+
+          {user && ( // Only show create post button if user is logged in
+            <Button
+              size="icon"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
+              onClick={() => setIsCreatePostOpen(true)}
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span className="sr-only">New post</span>
             </Button>
-          </Link>
-          <Button
-            size="icon"
-            className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
-            onClick={() => setIsCreatePostOpen(true)}
-          >
-            <PlusIcon className="h-5 w-5" />
-            <span className="sr-only">New post</span>
-          </Button>
+          )}
+
           <div className="flex items-center gap-2">
-            {user ? (
+            {user && profile ? ( // Check for profile as well
               <Link href="/profile">
-                <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full">
+                <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
                   <img
-                    src={user.user_metadata?.avatar_url || "/placeholder.svg?height=36&width=36&query=student profile"}
-                    alt="Profile"
-                    className="h-9 w-9 rounded-full object-cover"
+                    src={profile.avatar_url || "/placeholder.svg?height=36&width=36&query=student profile"}
+                    alt={profile.full_name || "Profile"}
+                    className="h-full w-full rounded-full object-cover"
                   />
                   <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
                   <span className="sr-only">Profile</span>
                 </Button>
               </Link>
-            ) : (
+            ) : !user && !authLoading ? ( // Show login only if not loading and no user
               <Link href="/login">
                 <Button variant="outline" size="sm" className="hidden md:flex">
                   Login
                 </Button>
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -195,11 +196,7 @@ export default function Home() {
       </main>
       <CreatePostDialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
       <SearchDialog open={isSearchOpen} onOpenChange={setIsSearchOpen} />
-      <NotificationsPopover
-        open={isNotificationsOpen}
-        onOpenChange={setIsNotificationsOpen}
-        triggerElement={notificationsAnchor}
-      />
+      {/* NotificationsPopover is now triggered by its child button in the header */}
     </SidebarInset>
   )
 }
