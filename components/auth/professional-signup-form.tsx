@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function ProfessionalSignupForm() {
   const [showPassword, setShowPassword] = useState(false)
@@ -37,13 +37,10 @@ export default function ProfessionalSignupForm() {
       await signUp(formData.email, formData.password, {
         ...formData,
         userType: "professional",
-        skills: formData.skills
-          .split(",")
-          .map((skill) => skill.trim())
-          .filter(Boolean),
+        skills: formData.skills.split(",").map((skill) => skill.trim()),
       })
       toast({
-        title: "Welcome to CampusConnect! 💼",
+        title: "Welcome to CampusConnect! 👔",
         description: "Your professional account has been created successfully.",
       })
     } catch (error: any) {
@@ -66,7 +63,7 @@ export default function ProfessionalSignupForm() {
             id="firstName"
             value={formData.firstName}
             onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-            placeholder="Jane"
+            placeholder="John"
             required
             disabled={loading}
           />
@@ -77,7 +74,7 @@ export default function ProfessionalSignupForm() {
             id="lastName"
             value={formData.lastName}
             onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-            placeholder="Smith"
+            placeholder="Doe"
             required
             disabled={loading}
           />
@@ -85,13 +82,13 @@ export default function ProfessionalSignupForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="email">Professional Email *</Label>
+        <Label htmlFor="email">Email *</Label>
         <Input
           id="email"
           type="email"
           value={formData.email}
           onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="jane.smith@company.com"
+          placeholder="john.doe@company.com"
           required
           disabled={loading}
         />
@@ -115,7 +112,7 @@ export default function ProfessionalSignupForm() {
             id="company"
             value={formData.company}
             onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-            placeholder="Tech Corp"
+            placeholder="Tech Company Inc."
             required
             disabled={loading}
           />
@@ -139,8 +136,11 @@ export default function ProfessionalSignupForm() {
               <SelectItem value="Healthcare">Healthcare</SelectItem>
               <SelectItem value="Education">Education</SelectItem>
               <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+              <SelectItem value="Retail">Retail</SelectItem>
+              <SelectItem value="Media">Media & Entertainment</SelectItem>
               <SelectItem value="Consulting">Consulting</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
+              <SelectItem value="Real Estate">Real Estate</SelectItem>
+              <SelectItem value="Energy">Energy</SelectItem>
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
@@ -156,36 +156,37 @@ export default function ProfessionalSignupForm() {
               <SelectValue placeholder="Select experience" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="0-1">0-1 years</SelectItem>
-              <SelectItem value="2-5">2-5 years</SelectItem>
+              <SelectItem value="1-2">1-2 years</SelectItem>
+              <SelectItem value="3-5">3-5 years</SelectItem>
               <SelectItem value="6-10">6-10 years</SelectItem>
               <SelectItem value="11-15">11-15 years</SelectItem>
-              <SelectItem value="15+">15+ years</SelectItem>
+              <SelectItem value="16+">16+ years</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="linkedinUrl">LinkedIn Profile</Label>
+        <Label htmlFor="linkedinUrl">LinkedIn Profile URL</Label>
         <Input
           id="linkedinUrl"
           value={formData.linkedinUrl}
           onChange={(e) => setFormData((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
-          placeholder="https://linkedin.com/in/janesmith"
+          placeholder="https://linkedin.com/in/johndoe"
           disabled={loading}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="skills">Skills (comma-separated)</Label>
+        <Label htmlFor="skills">Skills (comma separated) *</Label>
         <Textarea
           id="skills"
           value={formData.skills}
           onChange={(e) => setFormData((prev) => ({ ...prev, skills: e.target.value }))}
-          placeholder="JavaScript, React, Node.js, Python, Project Management"
-          rows={3}
+          placeholder="JavaScript, React, Project Management, Leadership"
+          required
           disabled={loading}
+          className="min-h-[80px]"
         />
       </div>
 

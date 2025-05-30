@@ -118,6 +118,15 @@ export default function StudentSignupForm() {
             <SelectItem value="UC Berkeley">UC Berkeley</SelectItem>
             <SelectItem value="UCLA">UCLA</SelectItem>
             <SelectItem value="University of Washington">University of Washington</SelectItem>
+            <SelectItem value="University of Michigan">University of Michigan</SelectItem>
+            <SelectItem value="New York University">New York University</SelectItem>
+            <SelectItem value="Columbia University">Columbia University</SelectItem>
+            <SelectItem value="University of Texas at Austin">University of Texas at Austin</SelectItem>
+            <SelectItem value="University of Illinois">University of Illinois</SelectItem>
+            <SelectItem value="Georgia Tech">Georgia Tech</SelectItem>
+            <SelectItem value="University of Pennsylvania">University of Pennsylvania</SelectItem>
+            <SelectItem value="Princeton University">Princeton University</SelectItem>
+            <SelectItem value="Yale University">Yale University</SelectItem>
             <SelectItem value="Other">Other</SelectItem>
           </SelectContent>
         </Select>
