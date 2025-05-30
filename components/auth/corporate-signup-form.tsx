@@ -5,7 +5,8 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea" // For description
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
@@ -14,13 +15,17 @@ export default function CorporateSignupForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: "", // Representative's first name
-    lastName: "", // Representative's last name
-    email: "", // Representative's official email
+    firstName: "",
+    lastName: "",
+    email: "",
     password: "",
+    jobTitle: "",
     companyName: "",
-    companyWebsite: "",
+    companySize: "",
     industry: "",
+    companyWebsite: "",
+    headquarters: "",
+    foundedYear: "",
     companyDescription: "",
   })
   const { signUp } = useAuth()
@@ -30,22 +35,19 @@ export default function CorporateSignupForm() {
     e.preventDefault()
     setLoading(true)
 
-    const corporateData = {
-      ...formData,
-      userType: "corporate",
-    }
-
     try {
-      await signUp(formData.email, formData.password, corporateData, "corporate")
-      toast({
-        title: "Corporate Account Registered! 🏢",
-        description: "Your corporate account application has been submitted. Redirecting...",
+      await signUp(formData.email, formData.password, {
+        ...formData,
+        userType: "corporate",
       })
-      // Redirection handled by AuthContext
+      toast({
+        title: "Welcome to CampusConnect! 🏢",
+        description: "Your corporate account has been created successfully.",
+      })
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to register corporate account",
+        description: error.message || "Failed to create account",
         variant: "destructive",
       })
     } finally {
@@ -55,97 +57,183 @@ export default function CorporateSignupForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-lg font-medium text-center">Representative Information</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="firstName-corp">First Name *</Label>
+          <Label htmlFor="firstName">First Name *</Label>
           <Input
-            id="firstName-corp"
+            id="firstName"
             value={formData.firstName}
             onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-            placeholder="HR"
+            placeholder="John"
             required
             disabled={loading}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="lastName-corp">Last Name *</Label>
+          <Label htmlFor="lastName">Last Name *</Label>
           <Input
-            id="lastName-corp"
+            id="lastName"
             value={formData.lastName}
             onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-            placeholder="Manager"
+            placeholder="Doe"
             required
             disabled={loading}
           />
         </div>
       </div>
+
       <div className="space-y-2">
-        <Label htmlFor="email-corp">Your Official Email *</Label>
+        <Label htmlFor="email">Corporate Email *</Label>
         <Input
-          id="email-corp"
+          id="email"
           type="email"
           value={formData.email}
           onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="hr@company.com"
+          placeholder="john.doe@company.com"
           required
           disabled={loading}
         />
       </div>
 
-      <hr className="my-6" />
-      <h3 className="text-lg font-medium text-center">Company Information</h3>
       <div className="space-y-2">
-        <Label htmlFor="companyName-corp">Company Name *</Label>
+        <Label htmlFor="jobTitle">Your Job Title *</Label>
         <Input
-          id="companyName-corp"
+          id="jobTitle"
+          value={formData.jobTitle}
+          onChange={(e) => setFormData((prev) => ({ ...prev, jobTitle: e.target.value }))}
+          placeholder="HR Manager, Talent Acquisition Lead, etc."
+          required
+          disabled={loading}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="companyName">Company Name *</Label>
+        <Input
+          id="companyName"
           value={formData.companyName}
           onChange={(e) => setFormData((prev) => ({ ...prev, companyName: e.target.value }))}
-          placeholder="Innovatech Solutions Inc."
+          placeholder="Tech Corp Inc."
           required
           disabled={loading}
         />
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="companyWebsite-corp">Company Website</Label>
-          <Input
-            id="companyWebsite-corp"
-            type="url"
-            value={formData.companyWebsite}
-            onChange={(e) => setFormData((prev) => ({ ...prev, companyWebsite: e.target.value }))}
-            placeholder="https://innovatech.com"
+          <Label htmlFor="companySize">Company Size *</Label>
+          <Select
+            value={formData.companySize}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, companySize: value }))}
             disabled={loading}
-          />
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select company size" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1-10">1-10 employees</SelectItem>
+              <SelectItem value="11-50">11-50 employees</SelectItem>
+              <SelectItem value="51-200">51-200 employees</SelectItem>
+              <SelectItem value="201-500">201-500 employees</SelectItem>
+              <SelectItem value="501-1000">501-1000 employees</SelectItem>
+              <SelectItem value="1001-5000">1001-5000 employees</SelectItem>
+              <SelectItem value="5000+">5000+ employees</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="industry-corp">Industry</Label>
-          <Input
-            id="industry-corp"
+          <Label htmlFor="industry">Industry *</Label>
+          <Select
             value={formData.industry}
-            onChange={(e) => setFormData((prev) => ({ ...prev, industry: e.target.value }))}
-            placeholder="e.g., Technology, Finance, Healthcare"
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, industry: value }))}
             disabled={loading}
-          />
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select industry" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Technology">Technology</SelectItem>
+              <SelectItem value="Finance">Finance & Banking</SelectItem>
+              <SelectItem value="Healthcare">Healthcare</SelectItem>
+              <SelectItem value="Education">Education</SelectItem>
+              <SelectItem value="Consulting">Consulting</SelectItem>
+              <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+              <SelectItem value="Retail">Retail</SelectItem>
+              <SelectItem value="Media">Media & Entertainment</SelectItem>
+              <SelectItem value="Automotive">Automotive</SelectItem>
+              <SelectItem value="Energy">Energy</SelectItem>
+              <SelectItem value="Real Estate">Real Estate</SelectItem>
+              <SelectItem value="Government">Government</SelectItem>
+              <SelectItem value="Non-profit">Non-profit</SelectItem>
+              <SelectItem value="Other">Other</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
+
       <div className="space-y-2">
-        <Label htmlFor="companyDescription-corp">Company Description</Label>
-        <Textarea
-          id="companyDescription-corp"
-          value={formData.companyDescription}
-          onChange={(e) => setFormData((prev) => ({ ...prev, companyDescription: e.target.value }))}
-          placeholder="Briefly describe your company and what it does."
+        <Label htmlFor="companyWebsite">Company Website</Label>
+        <Input
+          id="companyWebsite"
+          value={formData.companyWebsite}
+          onChange={(e) => setFormData((prev) => ({ ...prev, companyWebsite: e.target.value }))}
+          placeholder="https://www.company.com"
           disabled={loading}
         />
       </div>
 
-      <hr className="my-6" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="headquarters">Headquarters Location</Label>
+          <Input
+            id="headquarters"
+            value={formData.headquarters}
+            onChange={(e) => setFormData((prev) => ({ ...prev, headquarters: e.target.value }))}
+            placeholder="San Francisco, CA"
+            disabled={loading}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="foundedYear">Founded Year</Label>
+          <Select
+            value={formData.foundedYear}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, foundedYear: value }))}
+            disabled={loading}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select year" />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 50 }, (_, i) => {
+                const year = new Date().getFullYear() - i
+                return (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="space-y-2">
-        <Label htmlFor="password-corp">Create Password for Your Account *</Label>
+        <Label htmlFor="companyDescription">Company Description</Label>
+        <Textarea
+          id="companyDescription"
+          value={formData.companyDescription}
+          onChange={(e) => setFormData((prev) => ({ ...prev, companyDescription: e.target.value }))}
+          placeholder="Brief description of your company and what you do..."
+          disabled={loading}
+          rows={3}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="password">Password *</Label>
         <div className="relative">
           <Input
-            id="password-corp"
+            id="password"
             type={showPassword ? "text" : "password"}
             value={formData.password}
             onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
@@ -168,17 +256,17 @@ export default function CorporateSignupForm() {
 
       <Button
         type="submit"
-        className="w-full bg-gradient-to-r from-indigo-500 to-sky-600 hover:from-indigo-600 hover:to-sky-700"
+        className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
         disabled={loading}
         size="lg"
       >
         {loading ? (
           <>
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Registering Corporate Account...
+            Creating Account...
           </>
         ) : (
-          "Register Corporate Account"
+          "Create Corporate Account"
         )}
       </Button>
     </form>

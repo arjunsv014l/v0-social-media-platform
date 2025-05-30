@@ -1,217 +1,357 @@
 "use client"
 
-import type React from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/contexts/auth-context"
-import { usePathname, useRouter } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Home, LogOut, UserCircle, SettingsIcon, BookOpen, MessageSquare, Bell } from "lucide-react" // Added more icons
-import { useMemo } from "react"
-import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
+import {
+  BookOpenIcon,
+  CalendarIcon,
+  HomeIcon,
+  UserIcon,
+  UsersIcon,
+  MessageSquareIcon,
+  SettingsIcon,
+  BellIcon,
+  SearchIcon,
+  PlusIcon,
+  LogOutIcon,
+  GraduationCapIcon,
+  Loader2,
+  SunIcon,
+  MoonIcon,
+  LaptopIcon,
+  VideoIcon,
+} from "lucide-react"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar"
+import { Badge } from "@/components/ui/badge"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase/client"
+import { CreatePostDialog } from "@/components/create-post-dialog"
+import { SearchDialog } from "@/components/search-dialog"
+import { NotificationsPopover } from "@/components/notifications-popover"
+import { useTheme } from "next-themes"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/components/ui/use-toast" // Add this import
 
-interface NavItem {
-  label: string
-  href: string
-  icon: React.ComponentType<any>
-}
+const navigationItems = [
+  {
+    title: "Home",
+    url: "/",
+    icon: HomeIcon,
+  },
+  {
+    title: "Profile",
+    url: "/profile",
+    icon: UserIcon,
+  },
+  {
+    title: "Friends",
+    url: "/friends",
+    icon: UsersIcon,
+    badge: "friendRequests",
+  },
+  {
+    title: "Messages",
+    url: "/messages",
+    icon: MessageSquareIcon,
+    badge: "unreadMessages",
+  },
+  {
+    title: "Events",
+    url: "/events",
+    icon: CalendarIcon,
+  },
+  {
+    title: "Courses",
+    url: "/courses",
+    icon: BookOpenIcon,
+  },
+  {
+    title: "Create",
+    url: "/create",
+    icon: VideoIcon,
+  },
+]
 
-interface AppSidebarProps {
-  className?: string
-}
-
-export function AppSidebar({ className }: AppSidebarProps) {
-  const { user, profile, loading: authLoading, signOut } = useAuth()
+export function AppSidebar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const { user, profile, signOut } = useAuth()
+  const { setTheme } = useTheme()
+  const { toast } = useToast() // Initialize toast
 
-  const sidebarTitle = useMemo(() => {
-    if (!profile) return "Dashboard"
-    switch (profile.user_type) {
-      case "student":
-        return profile.full_name || "Student Dashboard"
-      case "university":
-        return `${profile.affiliated_college || "University"} Portal`
-      case "corporate":
-        return `${profile.company_name || "Corporate"} Portal`
-      default:
-        return "Dashboard"
+  const [badges, setBadges] = useState({
+    friendRequests: 0,
+    unreadMessages: 0,
+    notifications: 0,
+  })
+  const [createPostOpen, setCreatePostOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
+
+  const [loadingSignOut, setLoadingSignOut] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+
+    const fetchBadgeData = async (type: keyof typeof badges) => {
+      let query
+      switch (type) {
+        case "friendRequests":
+          query = supabase
+            .from("friendships")
+            .select("*", { count: "exact", head: true })
+            .eq("friend_id", user.id)
+            .eq("status", "pending")
+          break
+        case "unreadMessages":
+          query = supabase
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("receiver_id", user.id)
+            .eq("read", false)
+          break
+        case "notifications":
+          query = supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("read", false)
+          break
+        default:
+          return
+      }
+      const { count } = await query
+      setBadges((prev) => ({ ...prev, [type]: count || 0 }))
     }
-  }, [profile])
 
-  const getDashboardPathForUser = () => {
-    if (!profile) return "/"
-    switch (profile.user_type) {
-      case "student":
-        return "/student/dashboard" // Updated for student dashboard
-      case "corporate":
-        return "/corporate/dashboard"
-      case "university":
-        return "/university/dashboard"
-      default:
-        return "/"
-    }
-  }
+    fetchBadgeData("friendRequests")
+    fetchBadgeData("unreadMessages")
+    fetchBadgeData("notifications")
 
-  const dashboardPath = getDashboardPathForUser()
-
-  const navigationItems = useMemo((): NavItem[] => {
-    if (!profile) return []
-
-    const baseNavItems: NavItem[] = [
-      {
-        label: "My Dashboard",
-        href: dashboardPath,
-        icon: Home,
-      },
-    ]
-
-    // Add student-specific navigation items if the user is a student
-    // and they are on their student dashboard or related student pages
-    if (profile.user_type === "student") {
-      baseNavItems.push(
-        {
-          label: "Courses",
-          href: "/courses", // Assuming a general courses page
-          icon: BookOpen,
-        },
-        {
-          label: "Messages",
-          href: "/messages", // Assuming a general messages page
-          icon: MessageSquare,
-        },
-        {
-          label: "Notifications",
-          href: "/notifications", // Assuming a general notifications page
-          icon: Bell,
+    const channels = supabase
+      .channel(`realtime-badges-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friendships", filter: `friend_id=eq.${user.id}` },
+        () => fetchBadgeData("friendRequests"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${user.id}` },
+        () => fetchBadgeData("unreadMessages"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new.read === false)) {
+            fetchBadgeData("notifications")
+          } else if (payload.eventType === "UPDATE" && payload.new.read === true) {
+            fetchBadgeData("notifications")
+          }
         },
       )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channels)
     }
-    // You can add more role-specific items here for university/corporate users if needed
+  }, [user])
 
-    return baseNavItems
-  }, [profile, dashboardPath])
-
-  if (authLoading) {
-    return (
-      <aside
-        className={cn("fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background sm:flex", className)}
-      >
-        <div className="flex h-16 shrink-0 items-center border-b px-6">
-          <Skeleton className="h-8 w-32" />
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-2">
-            {[...Array(5)].map(
-              (
-                _,
-                i, // Increased skeleton items to match potential nav items
-              ) => (
-                <Skeleton key={i} className="h-10 w-full rounded-md" />
-              ),
-            )}
-          </div>
-        </div>
-        <div className="mt-auto border-t p-4">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="flex-1 space-y-1">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-            </div>
-          </div>
-        </div>
-      </aside>
-    )
+  const handleSignOut = async () => {
+    setLoadingSignOut(true)
+    try {
+      await signOut() // This calls the signOut from AuthContext
+      // Redirection is now primarily handled within AuthContext's signOut
+      toast({
+        title: "Signed Out",
+        description: "You have been successfully signed out.",
+      })
+    } catch (error: any) {
+      console.error("AppSidebar: Error during sign out:", error)
+      toast({
+        title: "Sign Out Failed",
+        description: error.message || "An unexpected error occurred during sign out.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingSignOut(false)
+    }
   }
 
-  if (!profile && !authLoading) {
-    // Optionally, you could redirect to login or show a minimal sidebar
-    return null // Or a more specific placeholder if not logged in
+  if (pathname === "/login" || pathname === "/signup") {
+    return null
   }
 
   return (
-    <aside className={cn("fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background sm:flex", className)}>
-      <div className="flex h-16 shrink-0 items-center border-b px-6">
-        <Link href={dashboardPath} className="flex items-center gap-2 font-semibold">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={profile?.avatar_url || ""} alt={profile?.full_name || "User"} />
-            <AvatarFallback>{profile?.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
-          </Avatar>
-          <span className="truncate">{sidebarTitle}</span>
-        </Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-1">
-          {navigationItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "group flex items-center space-x-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                pathname === item.href ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
-      <div className="mt-auto border-t p-4">
-        {user && profile && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-2 text-left h-auto py-2">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name || "User"} />
-                  <AvatarFallback>{profile.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col truncate">
-                  <span className="text-sm font-medium truncate">{profile.full_name}</span>
-                  <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+    <>
+      <Sidebar variant="inset" className="border-r-0">
+        <SidebarHeader className="border-b border-sidebar-border">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-600">
+              <GraduationCapIcon className="h-4 w-4 text-white" />
+            </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">CampusConnect</span>
+              <span className="truncate text-xs text-sidebar-foreground/70">Student Social Network</span>
+            </div>
+          </div>
+        </SidebarHeader>
+
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {navigationItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={pathname === item.url}>
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                        {item.badge && badges[item.badge as keyof typeof badges] > 0 && (
+                          <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
+                            {badges[item.badge as keyof typeof badges]}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setCreatePostOpen(true)}>
+                    <PlusIcon className="h-4 w-4" />
+                    <span>Create Post</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setSearchOpen(true)}>
+                    <SearchIcon className="h-4 w-4" />
+                    <span>Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
+                    <SidebarMenuButton>
+                      <BellIcon className="h-4 w-4" />
+                      <span>Notifications</span>
+                      {badges.notifications > 0 && (
+                        <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
+                          {badges.notifications}
+                        </Badge>
+                      )}
+                    </SidebarMenuButton>
+                  </NotificationsPopover>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>Account</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === "/settings"}>
+                    <Link href="/settings">
+                      <SettingsIcon className="h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-start px-2 py-1.5 h-auto text-sm">
+                    <SunIcon className="h-[1.1rem] w-[1.1rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <MoonIcon className="absolute h-[1.1rem] w-[1.1rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <span className="ml-2">Toggle Theme</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="top"
+                  className="mb-1 w-[calc(var(--sidebar-width)_-_var(--sidebar-spacing-horizontal)_*_2)] sm:w-auto"
+                >
+                  <DropdownMenuItem onClick={() => setTheme("light")}>
+                    <SunIcon className="mr-2 h-4 w-4" />
+                    Light
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("dark")}>
+                    <MoonIcon className="mr-2 h-4 w-4" />
+                    Dark
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("system")}>
+                    <LaptopIcon className="mr-2 h-4 w-4" />
+                    System
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              {profile ? (
+                <div className="flex items-center gap-3 px-2 py-1.5">
+                  <div className="relative">
+                    <img
+                      src={profile.avatar_url || "/placeholder.svg?height=32&width=32&query=student profile"}
+                      alt={profile.full_name || "User profile"}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                    <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-sidebar-background" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">{profile.full_name || "Campus User"}</span>
+                    <span className="truncate text-xs text-sidebar-foreground/70">@{profile.username || "user"}</span>
+                  </div>
                 </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => router.push("/profile")} className="cursor-pointer">
-                <UserCircle className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => router.push("/settings")} className="cursor-pointer">
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (typeof signOut === "function") {
-                    signOut()
-                    router.push("/login")
-                  } else {
-                    console.error("SignOut function is not available on AuthContext")
-                  }
-                }}
-                className="cursor-pointer text-red-600 hover:!text-red-600 focus:!text-red-600 hover:!bg-red-50 focus:!bg-red-50 dark:hover:!bg-red-900/50 dark:focus:!bg-red-900/50 dark:text-red-500 dark:hover:!text-red-500 dark:focus:!text-red-500"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-    </aside>
+              ) : (
+                <div className="flex items-center gap-3 px-2 py-1.5 h-[44px]">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Loading user...</span>
+                </div>
+              )}
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleSignOut} disabled={loadingSignOut}>
+                {loadingSignOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOutIcon className="h-4 w-4" />}
+                <span>Sign Out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
+
+      <CreatePostDialog open={createPostOpen} onOpenChange={setCreatePostOpen} />
+      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+    </>
   )
 }

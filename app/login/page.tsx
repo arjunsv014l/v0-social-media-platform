@@ -1,195 +1,188 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
-import Image from "next/image"
+import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { Database } from "@/lib/supabase/types"
-import { User, Briefcase, Building2 } from "lucide-react" // Added Building2 for University
-
-type UserRole = "student" | "corporate" | "university"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<UserRole>("student")
-  const router = useRouter()
-  const { user, profile, loading: authLoading } = useAuth() // Get user and profile from context
+  const [activeTab, setActiveTab] = useState("student")
+  const { signIn } = useAuth()
+  const { toast } = useToast()
 
-  const supabase = createClientComponentClient<Database>()
-
-  useEffect(() => {
-    if (!authLoading && user && profile) {
-      // User is logged in and profile is loaded, redirect based on profile
-      switch (profile.user_type) {
-        case "student":
-          router.push("/") // Student main feed
-          break
-        case "professional":
-          // Professionals are removed, but handle if somehow exists
-          router.push("/professional/dashboard")
-          break
-        case "corporate":
-          router.push("/corporate/dashboard")
-          break
-        case "university":
-          router.push("/university/dashboard")
-          break
-        default:
-          router.push("/") // Fallback
-      }
-    }
-  }, [user, profile, authLoading, router])
-
-  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
 
-      if (signInError) {
-        setError(signInError.message)
-        setLoading(false)
-        return
-      }
-      // The useEffect above will handle redirection once user & profile are updated in context
-      // Forcing a reload or specific fetch might be needed if context doesn't update immediately
-      // For now, relying on AuthContext to update and trigger useEffect
-      // router.refresh(); // Could help, but AuthContext should ideally handle it
-    } catch (catchError: any) {
-      setError(catchError.message || "An unexpected error occurred.")
+    try {
+      await signIn(email, password)
+      toast({
+        title: "Welcome back! 🎉",
+        description: "You've successfully logged in.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign in",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const getTabContent = (role: UserRole) => {
-    switch (role) {
-      case "student":
-        return { title: "Student Login", description: "Access your student dashboard and resources." }
-      case "corporate":
-        return { title: "Corporate Login", description: "Access your corporate portal and tools." }
-      case "university":
-        return { title: "University Login", description: "Access the university management portal." }
-      default:
-        return { title: "Login", description: "Sign in to your account." }
-    }
-  }
-
-  const { title, description } = getTabContent(selectedRole)
-
-  if (authLoading || (user && profile)) {
-    // Show a loading state or null while redirecting
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 to-slate-700 p-4">
-        <p className="text-white text-xl">Loading your experience...</p>
+  const getTabContent = (userType: string, icon: React.ReactNode, title: string, description: string) => (
+    <div className="text-center mb-6">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
+        {icon}
       </div>
-    )
-  }
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  )
 
   return (
-    <div className="w-full lg:grid lg:min-h-[100vh] lg:grid-cols-2 xl:min-h-[100vh]">
-      <div className="flex items-center justify-center py-12">
-        <div className="mx-auto grid w-[400px] gap-6">
-          <div className="grid gap-2 text-center">
-            <h1 className="text-3xl font-bold">{title}</h1>
-            <p className="text-balance text-muted-foreground">{description}</p>
-          </div>
-          <Tabs value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole)} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="student" className="flex items-center gap-2">
-                <User className="h-4 w-4" /> Student
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/5"></div>
+      <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/95">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Welcome Back! ✨
+          </CardTitle>
+          <CardDescription>Sign in to your CampusConnect account</CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
+              <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
+                <GraduationCap className="h-3 w-3" />
+                Student
               </TabsTrigger>
-              <TabsTrigger value="university" className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> University
+              <TabsTrigger value="professional" className="flex items-center gap-1 text-xs">
+                <Briefcase className="h-3 w-3" />
+                Professional
               </TabsTrigger>
-              <TabsTrigger value="corporate" className="flex items-center gap-2">
-                <Briefcase className="h-4 w-4" /> Corporate
+              <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
+                <Building2 className="h-3 w-3" />
+                Corporate
               </TabsTrigger>
             </TabsList>
-            {/* TabsContent is not strictly needed here if the form is generic, 
-                but can be used if form fields differ per role in the future.
-                For now, the selectedRole state and getTabContent handle text changes.
-            */}
-            <TabsContent value={selectedRole} className="mt-0 pt-0">
-              {" "}
-              {/* Ensure no extra padding */}
-              {/* Content is effectively handled by the main form below, updated by selectedRole */}
+
+            <TabsContent value="student">
+              {getTabContent(
+                "student",
+                <GraduationCap className="h-6 w-6 text-white" />,
+                "Student Login",
+                "Access your campus network",
+              )}
+            </TabsContent>
+
+            <TabsContent value="professional">
+              {getTabContent(
+                "professional",
+                <Briefcase className="h-6 w-6 text-white" />,
+                "Professional Login",
+                "Connect and mentor students",
+              )}
+            </TabsContent>
+
+            <TabsContent value="corporate">
+              {getTabContent(
+                "corporate",
+                <Building2 className="h-6 w-6 text-white" />,
+                "Corporate Login",
+                "Find talent and post opportunities",
+              )}
             </TabsContent>
           </Tabs>
 
-          <form onSubmit={handleSignIn} className="grid gap-4">
-            <div className="grid gap-2">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
-                required
+                placeholder="your.email@domain.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-            <div className="grid gap-2">
-              <div className="flex items-center">
-                <Label htmlFor="password">Password</Label>
-                <Link
-                  href="/forgot-password" // Assuming you have a forgot password page
-                  className="ml-auto inline-block text-sm underline"
-                >
-                  Forgot your password?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                type="password"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
               />
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing In..." : "Sign In"}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                >
+                  {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <input type="checkbox" id="remember" className="rounded" disabled={loading} />
+                <Label htmlFor="remember" className="text-sm">
+                  Remember me
+                </Label>
+              </div>
+              <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In 🚀"
+              )}
             </Button>
-            {/* Optional: Social logins if you have them
-            <Button variant="outline" className="w-full">
-              Login with Google
-            </Button> */}
           </form>
-          <div className="mt-4 text-center text-sm">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="underline">
-              Sign up
+        </CardContent>
+
+        <CardFooter className="text-center">
+          <div className="text-sm w-full">
+            {"Don't have an account? "}
+            <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+              Sign up here! 🎓
             </Link>
           </div>
-        </div>
-      </div>
-      <div className="hidden bg-muted lg:block">
-        <Image
-          src="/university-social-network.png"
-          alt="Social Platform"
-          width="1920"
-          height="1080"
-          className="h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-        />
-      </div>
+        </CardFooter>
+      </Card>
     </div>
   )
 }
