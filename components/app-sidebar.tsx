@@ -20,6 +20,7 @@ import {
   SunIcon,
   MoonIcon,
   LaptopIcon,
+  VideoIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -76,6 +77,11 @@ const navigationItems = [
     title: "Courses",
     url: "/courses",
     icon: BookOpenIcon,
+  },
+  {
+    title: "Create",
+    url: "/create",
+    icon: VideoIcon,
   },
 ]
 
