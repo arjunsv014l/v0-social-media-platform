@@ -13,6 +13,7 @@ export interface Profile {
   major?: string
   graduation_year?: string // Ensure consistent naming (e.g., snake_case for DB)
   student_id_number?: string
+  contact_phone?: string // New field for student contact
 
   // Professional specific
   job_title?: string // Can also be for corporate user's own title
@@ -26,7 +27,7 @@ export interface Profile {
   // Corporate specific (for the company the user represents)
   company_name?: string // Name of the company being represented
   company_size?: string
-  industry?: string // shared with professional, but context is company's industry
+  // industry is shared with professional, but context is company's industry
   company_website?: string
   headquarters?: string // Company's HQ
   // linkedin_url (can be company's LinkedIn page)
