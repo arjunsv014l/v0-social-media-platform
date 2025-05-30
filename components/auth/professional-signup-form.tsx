@@ -1,235 +1,237 @@
 "use client"
 
-import type React from "react"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+
 import { Button } from "@/components/ui/button"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/components/ui/use-toast"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/use-toast"
+import { industries } from "@/lib/constants/universities"
 
-export default function ProfessionalSignupForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    jobTitle: "",
-    company: "",
-    industry: "",
-    yearsExperience: "",
-    linkedinUrl: "",
-    skills: "",
+const formSchema = z.object({
+  email: z.string().email({
+    message: "Please enter a valid email address.",
+  }),
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters.",
+  }),
+  fullName: z.string().min(2, {
+    message: "Please enter your full name.",
+  }),
+  jobTitle: z.string().min(2, {
+    message: "Please enter your job title.",
+  }),
+  company: z.string().min(2, {
+    message: "Please enter your company name.",
+  }),
+  industry: z.string({
+    required_error: "Please select your industry.",
+  }),
+  yearsExperience: z.string().regex(/^\d+$/, {
+    message: "Please enter a valid number of years.",
+  }),
+  skills: z.string().min(2, {
+    message: "Please enter your skills (comma separated).",
+  }),
+})
+
+export function ProfessionalSignupForm() {
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const supabase = createClientComponentClient()
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      fullName: "",
+      jobTitle: "",
+      company: "",
+      industry: "",
+      yearsExperience: "",
+      skills: "",
+    },
   })
-  const { signUp } = useAuth()
-  const { toast } = useToast()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsLoading(true)
     try {
-      await signUp(formData.email, formData.password, {
-        ...formData,
-        userType: "professional",
-        skills: formData.skills.split(",").map((skill) => skill.trim()),
+      // Sign up with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          data: {
+            full_name: values.fullName,
+            user_type: "professional",
+          },
+        },
       })
+
+      if (authError) throw authError
+
+      // Create profile in the profiles table
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: authData.user!.id,
+        full_name: values.fullName,
+        job_title: values.jobTitle,
+        company_name: values.company,
+        industry: values.industry,
+        years_experience: Number.parseInt(values.yearsExperience),
+        skills: values.skills.split(",").map((skill) => skill.trim()),
+        user_type: "professional",
+      })
+
+      if (profileError) throw profileError
+
       toast({
-        title: "Welcome to CampusConnect! 👔",
-        description: "Your professional account has been created successfully.",
+        title: "Account created!",
+        description: "You've successfully signed up as a professional.",
       })
+
+      // Redirect to profile completion page
+      router.push("/profile/complete")
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create account",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="firstName">First Name *</Label>
-          <Input
-            id="firstName"
-            value={formData.firstName}
-            onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-            placeholder="John"
-            required
-            disabled={loading}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="lastName">Last Name *</Label>
-          <Input
-            id="lastName"
-            value={formData.lastName}
-            onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-            placeholder="Doe"
-            required
-            disabled={loading}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="email">Email *</Label>
-        <Input
-          id="email"
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="john.doe@company.com"
-          required
-          disabled={loading}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input placeholder="you@company.com" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="jobTitle">Job Title *</Label>
-          <Input
-            id="jobTitle"
-            value={formData.jobTitle}
-            onChange={(e) => setFormData((prev) => ({ ...prev, jobTitle: e.target.value }))}
-            placeholder="Senior Software Engineer"
-            required
-            disabled={loading}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="company">Company *</Label>
-          <Input
-            id="company"
-            value={formData.company}
-            onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-            placeholder="Tech Company Inc."
-            required
-            disabled={loading}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="industry">Industry *</Label>
-          <Select
-            value={formData.industry}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, industry: value }))}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select industry" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Technology">Technology</SelectItem>
-              <SelectItem value="Finance">Finance</SelectItem>
-              <SelectItem value="Healthcare">Healthcare</SelectItem>
-              <SelectItem value="Education">Education</SelectItem>
-              <SelectItem value="Manufacturing">Manufacturing</SelectItem>
-              <SelectItem value="Retail">Retail</SelectItem>
-              <SelectItem value="Media">Media & Entertainment</SelectItem>
-              <SelectItem value="Consulting">Consulting</SelectItem>
-              <SelectItem value="Real Estate">Real Estate</SelectItem>
-              <SelectItem value="Energy">Energy</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="yearsExperience">Years of Experience *</Label>
-          <Select
-            value={formData.yearsExperience}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, yearsExperience: value }))}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select experience" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1-2">1-2 years</SelectItem>
-              <SelectItem value="3-5">3-5 years</SelectItem>
-              <SelectItem value="6-10">6-10 years</SelectItem>
-              <SelectItem value="11-15">11-15 years</SelectItem>
-              <SelectItem value="16+">16+ years</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="linkedinUrl">LinkedIn Profile URL</Label>
-        <Input
-          id="linkedinUrl"
-          value={formData.linkedinUrl}
-          onChange={(e) => setFormData((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
-          placeholder="https://linkedin.com/in/johndoe"
-          disabled={loading}
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="••••••••" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="skills">Skills (comma separated) *</Label>
-        <Textarea
-          id="skills"
-          value={formData.skills}
-          onChange={(e) => setFormData((prev) => ({ ...prev, skills: e.target.value }))}
-          placeholder="JavaScript, React, Project Management, Leadership"
-          required
-          disabled={loading}
-          className="min-h-[80px]"
+        <FormField
+          control={form.control}
+          name="fullName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Full Name</FormLabel>
+              <FormControl>
+                <Input placeholder="John Doe" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="password">Password *</Label>
-        <div className="relative">
-          <Input
-            id="password"
-            type={showPassword ? "text" : "password"}
-            value={formData.password}
-            onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-            placeholder="Create a strong password"
-            required
-            disabled={loading}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
-            onClick={() => setShowPassword(!showPassword)}
-            disabled={loading}
-          >
-            {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
-
-      <Button
-        type="submit"
-        className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700"
-        disabled={loading}
-        size="lg"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Creating Account...
-          </>
-        ) : (
-          "Create Professional Account"
-        )}
-      </Button>
-    </form>
+        <FormField
+          control={form.control}
+          name="jobTitle"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Job Title</FormLabel>
+              <FormControl>
+                <Input placeholder="Senior Software Engineer" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="company"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Company</FormLabel>
+              <FormControl>
+                <Input placeholder="Acme Inc." {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="industry"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Industry</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your industry" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {industries.map((industry) => (
+                    <SelectItem key={industry.value} value={industry.value}>
+                      {industry.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="yearsExperience"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Years of Experience</FormLabel>
+              <FormControl>
+                <Input placeholder="5" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="skills"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Skills (comma separated)</FormLabel>
+              <FormControl>
+                <Textarea placeholder="JavaScript, React, Node.js, Project Management" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Creating account..." : "Sign Up as Professional"}
+        </Button>
+      </form>
+    </Form>
   )
 }

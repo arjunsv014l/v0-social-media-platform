@@ -1,235 +1,395 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Briefcase, Users, BookOpen, Calendar, MessageSquare, Award } from "lucide-react"
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { SidebarInset } from "@/components/ui/sidebar"
-import { ProfessionalHeader } from "@/components/professional/professional-header"
-import { ProfessionalSidebar } from "@/components/professional/professional-sidebar"
-import { Users, BookOpen, Calendar, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase/client"
-import type { Profile } from "@/lib/supabase/types"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 
 export default function ProfessionalDashboard() {
-  const { user, profile, loading } = useAuth()
   const router = useRouter()
-  const [mentorshipRequests, setMentorshipRequests] = useState(0)
-  const [upcomingMeetings, setUpcomingMeetings] = useState(0)
-  const [connectedStudents, setConnectedStudents] = useState<Profile[]>([])
-  const [loadingData, setLoadingData] = useState(true)
+  const supabase = createClientComponentClient()
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [mentorshipRequests, setMentorshipRequests] = useState([
+    {
+      id: 1,
+      name: "Alex Johnson",
+      university: "MIT",
+      major: "Computer Science",
+      message: "I'd love to learn more about your career path in software engineering.",
+    },
+    {
+      id: 2,
+      name: "Jamie Smith",
+      university: "Stanford",
+      major: "Business",
+      message: "Looking for guidance on breaking into product management.",
+    },
+  ])
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login")
-      return
-    }
-
-    if (profile && profile.user_type !== "professional") {
-      // Redirect to appropriate dashboard based on user type
-      router.push(profile.user_type === "corporate" ? "/corporate/dashboard" : "/")
-      return
-    }
-
-    const fetchDashboardData = async () => {
-      if (!user) return
-
+    async function loadProfile() {
       try {
-        setLoadingData(true)
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-        // Fetch mentorship requests (placeholder)
-        setMentorshipRequests(Math.floor(Math.random() * 5) + 1)
-
-        // Fetch upcoming meetings (placeholder)
-        setUpcomingMeetings(Math.floor(Math.random() * 3))
-
-        // Fetch connected students
-        const { data: connections } = await supabase
-          .from("friendships")
-          .select("friend_id")
-          .eq("user_id", user.id)
-          .eq("status", "accepted")
-          .limit(5)
-
-        if (connections && connections.length > 0) {
-          const friendIds = connections.map((c) => c.friend_id)
-          const { data: students } = await supabase
-            .from("profiles")
-            .select("*")
-            .in("id", friendIds)
-            .eq("user_type", "student")
-            .limit(5)
-
-          setConnectedStudents((students as Profile[]) || [])
+        if (!user) {
+          router.push("/login")
+          return
         }
+
+        const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+
+        if (error) throw error
+
+        if (data.user_type !== "professional") {
+          // Redirect non-professionals
+          if (data.user_type === "student") {
+            router.push("/")
+          } else if (data.user_type === "corporate") {
+            router.push("/corporate/dashboard")
+          }
+          return
+        }
+
+        setProfile(data)
       } catch (error) {
-        console.error("Error fetching dashboard data:", error)
+        console.error("Error loading profile:", error)
       } finally {
-        setLoadingData(false)
+        setLoading(false)
       }
     }
 
-    fetchDashboardData()
-  }, [user, profile, loading, router])
+    loadProfile()
+  }, [supabase, router])
 
-  if (loading || loadingData) {
+  if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">Loading...</h2>
+          <p className="text-muted-foreground">Please wait while we load your dashboard</p>
+        </div>
       </div>
     )
   }
 
+  if (!profile) return null
+
   return (
-    <>
-      <ProfessionalSidebar />
-      <SidebarInset>
-        <ProfessionalHeader />
+    <div className="container mx-auto py-8">
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Professional Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back, {profile.full_name}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => router.push("/profile")}>
+            View Profile
+          </Button>
+          <Button>Create Mentorship Opportunity</Button>
+        </div>
+      </div>
 
-        <main className="flex-1 p-6">
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Professional Dashboard</h1>
-              <p className="text-muted-foreground">
-                Welcome back, {profile?.full_name}. Here's what's happening with your mentorship activities.
-              </p>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Mentorship Requests</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{mentorshipRequests}</div>
-                  <p className="text-xs text-muted-foreground">+{Math.floor(Math.random() * 10)}% from last week</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Upcoming Meetings</CardTitle>
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{upcomingMeetings}</div>
-                  <p className="text-xs text-muted-foreground">For this week</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Connected Students</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{connectedStudents.length}</div>
-                  <p className="text-xs text-muted-foreground">Active mentoring relationships</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Content Created</CardTitle>
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{Math.floor(Math.random() * 10)}</div>
-                  <p className="text-xs text-muted-foreground">Articles and resources shared</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Tabs defaultValue="mentees">
-              <TabsList className="grid w-full grid-cols-3 md:w-auto">
-                <TabsTrigger value="mentees">Mentees</TabsTrigger>
-                <TabsTrigger value="meetings">Meetings</TabsTrigger>
-                <TabsTrigger value="content">Content</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="mentees" className="space-y-4 mt-6">
-                <h2 className="text-xl font-semibold">Your Mentees</h2>
-                {connectedStudents.length > 0 ? (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {connectedStudents.map((student) => (
-                      <Card key={student.id}>
-                        <CardHeader className="flex flex-row items-center gap-4">
-                          <div className="h-12 w-12 rounded-full overflow-hidden">
-                            <img
-                              src={student.avatar_url || "/placeholder.svg?height=48&width=48&query=student"}
-                              alt={student.full_name}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">{student.full_name}</CardTitle>
-                            <CardDescription>
-                              {student.university || "University Student"} • {student.major || "Major"}
-                            </CardDescription>
-                          </div>
-                        </CardHeader>
-                        <CardFooter>
-                          <Button variant="outline" size="sm" className="w-full">
-                            Message
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    ))}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Mentorship Requests</CardTitle>
+            <CardDescription>Students seeking your guidance</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {mentorshipRequests.map((request) => (
+                <div key={request.id} className="flex items-start gap-4 rounded-lg border p-3">
+                  <Avatar>
+                    <AvatarFallback>{request.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{request.name}</p>
+                      <Badge variant="outline">New</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {request.university} • {request.major}
+                    </p>
+                    <p className="text-sm">{request.message}</p>
+                    <div className="flex gap-2 pt-2">
+                      <Button size="sm" variant="default">
+                        Accept
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        Decline
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <Card className="p-8 text-center">
-                    <CardContent className="pt-4 pb-6">
-                      <Users className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-                      <h3 className="mt-4 text-lg font-medium">No mentees yet</h3>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        You don't have any mentees yet. Start connecting with students to build your mentoring network.
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Your Impact</CardTitle>
+            <CardDescription>Your mentorship statistics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col items-center justify-center rounded-lg border p-3">
+                <Users className="h-8 w-8 text-primary" />
+                <h3 className="mt-2 text-2xl font-bold">12</h3>
+                <p className="text-xs text-muted-foreground">Active Mentees</p>
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-lg border p-3">
+                <MessageSquare className="h-8 w-8 text-primary" />
+                <h3 className="mt-2 text-2xl font-bold">48</h3>
+                <p className="text-xs text-muted-foreground">Messages</p>
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-lg border p-3">
+                <Calendar className="h-8 w-8 text-primary" />
+                <h3 className="mt-2 text-2xl font-bold">8</h3>
+                <p className="text-xs text-muted-foreground">Sessions</p>
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-lg border p-3">
+                <Award className="h-8 w-8 text-primary" />
+                <h3 className="mt-2 text-2xl font-bold">4.9</h3>
+                <p className="text-xs text-muted-foreground">Rating</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Upcoming Sessions</CardTitle>
+            <CardDescription>Your scheduled mentorship sessions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">Career Guidance</p>
+                  <Badge>Today</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">With Taylor Wilson</p>
+                <p className="text-sm">3:00 PM - 4:00 PM</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">Resume Review</p>
+                  <Badge variant="outline">Tomorrow</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">With Jordan Lee</p>
+                <p className="text-sm">11:00 AM - 12:00 PM</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-8">
+        <Tabs defaultValue="opportunities">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="resources">Resources</TabsTrigger>
+          </TabsList>
+          <div className="mt-6">
+            <TabsContent value="opportunities">
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Create Mentorship Opportunity</CardTitle>
+                    <CardDescription>Offer your expertise to students in specific areas</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <Button variant="outline" className="h-24 flex-col">
+                          <BookOpen className="mb-2 h-6 w-6" />
+                          <span>Career Guidance</span>
+                        </Button>
+                        <Button variant="outline" className="h-24 flex-col">
+                          <Briefcase className="mb-2 h-6 w-6" />
+                          <span>Resume Review</span>
+                        </Button>
+                        <Button variant="outline" className="h-24 flex-col">
+                          <Users className="mb-2 h-6 w-6" />
+                          <span>Mock Interview</span>
+                        </Button>
+                        <Button variant="outline" className="h-24 flex-col">
+                          <Award className="mb-2 h-6 w-6" />
+                          <span>Skill Development</span>
+                        </Button>
+                      </div>
+                      <Button className="w-full">Create Custom Opportunity</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Active Opportunities</CardTitle>
+                    <CardDescription>Current mentorship opportunities you're offering</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="rounded-lg border p-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-medium">Career Guidance in Tech</h3>
+                            <p className="text-sm text-muted-foreground">Helping students navigate tech career paths</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge variant="secondary">Career Advice</Badge>
+                              <Badge variant="secondary">Technology</Badge>
+                            </div>
+                          </div>
+                          <Badge>5 Applicants</Badge>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border p-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-medium">Resume Review Workshop</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Monthly resume review sessions for CS students
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge variant="secondary">Resume</Badge>
+                              <Badge variant="secondary">Workshop</Badge>
+                            </div>
+                          </div>
+                          <Badge>12 Applicants</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="students">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Mentees</CardTitle>
+                  <CardDescription>Students you're currently mentoring</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <Avatar>
+                          <AvatarFallback>TW</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">Taylor Wilson</p>
+                          <p className="text-sm text-muted-foreground">MIT • Computer Science</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Message
+                      </Button>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <Avatar>
+                          <AvatarFallback>JL</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">Jordan Lee</p>
+                          <p className="text-sm text-muted-foreground">Stanford • Business</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Message
+                      </Button>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <Avatar>
+                          <AvatarFallback>RP</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">Riley Parker</p>
+                          <p className="text-sm text-muted-foreground">Berkeley • Engineering</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Message
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="resources">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Mentorship Resources</CardTitle>
+                  <CardDescription>Tools and guides to help you be an effective mentor</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-lg border p-4">
+                      <h3 className="font-medium">Mentorship Best Practices</h3>
+                      <p className="text-sm text-muted-foreground">Learn effective techniques for guiding students</p>
+                      <Button variant="link" className="px-0">
+                        View Guide
+                      </Button>
+                    </div>
+
+                    <div className="rounded-lg border p-4">
+                      <h3 className="font-medium">Career Coaching Templates</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Ready-to-use templates for career coaching sessions
                       </p>
-                    </CardContent>
-                    <CardFooter className="flex justify-center">
-                      <Button>Find Students to Mentor</Button>
-                    </CardFooter>
-                  </Card>
-                )}
-              </TabsContent>
+                      <Button variant="link" className="px-0">
+                        Download Templates
+                      </Button>
+                    </div>
 
-              <TabsContent value="meetings" className="space-y-4 mt-6">
-                <h2 className="text-xl font-semibold">Upcoming Meetings</h2>
-                <Card className="p-8 text-center">
-                  <CardContent className="pt-4 pb-6">
-                    <Calendar className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">No upcoming meetings</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      You don't have any scheduled meetings. Schedule a meeting with your mentees.
-                    </p>
-                  </CardContent>
-                  <CardFooter className="flex justify-center">
-                    <Button>Schedule Meeting</Button>
-                  </CardFooter>
-                </Card>
-              </TabsContent>
+                    <div className="rounded-lg border p-4">
+                      <h3 className="font-medium">Resume Review Checklist</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Comprehensive checklist for reviewing student resumes
+                      </p>
+                      <Button variant="link" className="px-0">
+                        Get Checklist
+                      </Button>
+                    </div>
 
-              <TabsContent value="content" className="space-y-4 mt-6">
-                <h2 className="text-xl font-semibold">Your Content</h2>
-                <Card className="p-8 text-center">
-                  <CardContent className="pt-4 pb-6">
-                    <BookOpen className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">No content yet</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      You haven't created any content yet. Share your expertise with students.
-                    </p>
-                  </CardContent>
-                  <CardFooter className="flex justify-center">
-                    <Button>Create Content</Button>
-                  </CardFooter>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                    <div className="rounded-lg border p-4">
+                      <h3 className="font-medium">Mock Interview Questions</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Industry-specific interview questions for practice
+                      </p>
+                      <Button variant="link" className="px-0">
+                        Browse Questions
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </div>
-        </main>
-      </SidebarInset>
-    </>
+        </Tabs>
+      </div>
+    </div>
   )
 }
