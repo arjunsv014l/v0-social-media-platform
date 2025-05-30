@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, GraduationCap, Briefcase, Building2, LogOut } from "lucide-react"
+import { Home, LogOut } from "lucide-react"
 import { useMemo } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
@@ -28,34 +28,16 @@ interface NavItem {
 
 const allNavigationItems: NavItem[] = [
   {
-    label: "Home",
+    label: "Home Feed",
     href: "/",
     icon: Home,
-    userTypes: ["all"],
+    userTypes: ["student", "university", "corporate", "professional"],
   },
   {
-    label: "Student Dashboard",
-    href: "/student",
-    icon: GraduationCap,
-    userTypes: ["student"],
-  },
-  {
-    label: "University Portal",
-    href: "/university",
-    icon: Building2,
-    userTypes: ["university"],
-  },
-  {
-    label: "Corporate Portal",
-    href: "/corporate",
-    icon: Briefcase,
-    userTypes: ["corporate"],
-  },
-  {
-    label: "Professional Hub",
-    href: "/professional",
-    icon: Briefcase,
-    userTypes: ["professional"],
+    label: "My Dashboard",
+    href: "/dashboard",
+    icon: Home,
+    userTypes: ["student", "university", "corporate", "professional"],
   },
 ]
 
@@ -64,66 +46,98 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ className }: AppSidebarProps) {
-  const { user, profile, loading: authLoading, signOutUser } = useAuth()
+  const { user, profile, loading: authLoading, signOut } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
 
   const sidebarTitle = useMemo(() => {
-    switch (profile?.user_type) {
+    if (!profile) return "Dashboard"
+    switch (profile.user_type) {
       case "student":
-        return profile?.full_name || "Student Dashboard"
+        return profile.full_name || "Student Dashboard"
       case "university":
-        return `${profile?.affiliated_college || "University"} Portal`
+        return `${profile.affiliated_college || "University"} Portal`
       case "corporate":
-        return `${profile?.company_name || "Corporate"} Portal`
-      case "professional":
-        return profile?.full_name || "Professional Hub"
+        return `${profile.company_name || "Corporate"} Portal`
       default:
         return "Dashboard"
     }
   }, [profile])
 
+  const getDashboardPathForUser = () => {
+    if (!profile) return "/"
+    switch (profile.user_type) {
+      case "student":
+        return "/" // Student main feed
+      case "professional":
+        return "/professional/dashboard"
+      case "corporate":
+        return "/corporate/dashboard"
+      case "university":
+        return "/university/dashboard"
+      default:
+        return "/"
+    }
+  }
+
+  const dashboardPath = getDashboardPathForUser()
+
   const filteredNavigationItems = useMemo(() => {
-    return allNavigationItems.filter(
-      (item) => item.userTypes.includes(profile?.user_type || "") || item.userTypes.includes("all"),
-    )
+    if (!profile) return []
+
+    const items: NavItem[] = [
+      {
+        label: "My Dashboard",
+        href: dashboardPath,
+        icon: Home,
+        userTypes: [profile.user_type],
+      },
+    ]
+
+    return items
   }, [profile])
 
-  // Enhanced loading check
-  if (authLoading || !profile) {
+  if (authLoading) {
     return (
       <aside
         className={cn("fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background sm:flex", className)}
       >
         <div className="flex h-16 shrink-0 items-center border-b px-6">
-          {/* Consider a more specific logo/placeholder if available */}
-          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-8 w-32" />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          {" "}
-          {/* Changed nav to div for skeleton layout */}
-          <div className="space-y-1">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full rounded-md" />
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-md" />
             ))}
           </div>
         </div>
         <div className="mt-auto border-t p-4">
-          <Skeleton className="h-9 w-full rounded-md" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="flex-1 space-y-1">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
         </div>
       </aside>
     )
   }
 
+  if (!profile && !authLoading) {
+    return null
+  }
+
   return (
     <aside className={cn("fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background sm:flex", className)}>
       <div className="flex h-16 shrink-0 items-center border-b px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href={dashboardPath} className="flex items-center gap-2 font-semibold">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={profile?.image_url || ""} alt={profile?.full_name || "Avatar"} />
-            <AvatarFallback>{profile?.full_name?.charAt(0) || "U"}</AvatarFallback>
+            <AvatarImage src={profile?.avatar_url || ""} alt={profile?.full_name || "User"} />
+            <AvatarFallback>{profile?.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
           </Avatar>
-          <span>{sidebarTitle}</span>
+          <span className="truncate">{sidebarTitle}</span>
         </Link>
       </div>
       <nav className="flex-1 overflow-y-auto p-4">
@@ -144,35 +158,43 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </div>
       </nav>
       <div className="mt-auto border-t p-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full justify-start gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={profile?.image_url || ""} alt={profile?.full_name || "Avatar"} />
-                <AvatarFallback>{profile?.full_name?.charAt(0) || "U"}</AvatarFallback>
-              </Avatar>
-              <span>
-                {profile?.full_name}
-                <br />
-                <span className="text-xs text-muted-foreground">{user?.email}</span>
-              </span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                signOutUser()
-                router.push("/login")
-              }}
-              className="cursor-pointer"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {user && profile && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="w-full justify-start gap-2 text-left h-auto py-2">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name || "User"} />
+                  <AvatarFallback>{profile.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col truncate">
+                  <span className="text-sm font-medium truncate">{profile.full_name}</span>
+                  <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => router.push("/profile")} className="cursor-pointer">
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => router.push("/settings")} className="cursor-pointer">
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  signOut()
+                  router.push("/login")
+                }}
+                className="cursor-pointer text-red-600 hover:!text-red-600 hover:!bg-red-50 dark:hover:!bg-red-700/20 dark:text-red-500 dark:hover:!text-red-500"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </aside>
   )
