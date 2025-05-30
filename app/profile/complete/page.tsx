@@ -69,63 +69,34 @@ export default function CompleteStudentProfilePage() {
       if (!user) {
         router.replace("/login")
       } else if (profile) {
-        // Check if profile is complete, if so, redirect
-        if (profile.is_profile_complete === true) {
-          toast({ title: "Profile Already Complete", description: "Redirecting to your dashboard." })
-          router.replace(getDashboardPath(profile.user_type)) // Use getDashboardPath for correct redirection
-          return
-        }
-        // This page is for students, if not student and profile incomplete, redirect (or handle differently)
-        if (profile.user_type !== "student") {
+        if (profile.is_profile_complete) {
+          router.replace("/") // Or student dashboard path
+        } else if (profile.user_type !== "student") {
           toast({
             title: "Access Denied",
             description: "This profile completion is for students.",
             variant: "destructive",
           })
-          router.replace(getDashboardPath(profile.user_type)) // Redirect non-students
-          return
-        }
-        // Pre-fill form for students with incomplete profiles
-        setFormData({
-          full_name: profile.full_name || "",
-          username: profile.username || "",
-          university: profile.university || "",
-          major: profile.major || "",
-          graduation_year: profile.graduation_year || "",
-          student_id_number: profile.student_id_number || "",
-          contact_phone: profile.contact_phone || "",
-          avatar_url: profile.avatar_url || "",
-        })
-        if (profile.avatar_url) {
-          setAvatarPreview(profile.avatar_url)
+          router.replace("/") // Or their respective dashboard
+        } else {
+          setFormData({
+            full_name: profile.full_name || "",
+            username: profile.username || "",
+            university: profile.university || "",
+            major: profile.major || "",
+            graduation_year: profile.graduation_year || "",
+            student_id_number: profile.student_id_number || "",
+            contact_phone: profile.contact_phone || "",
+            avatar_url: profile.avatar_url || "",
+          })
+          if (profile.avatar_url) {
+            setAvatarPreview(profile.avatar_url)
+          }
         }
         setPageLoading(false)
-      } else {
-        // Profile is null, might be a new user or still loading
-        // If it's a new user, AuthContext's signUp should have created a basic profile
-        // with is_profile_complete: false. We wait for that profile to load.
-        console.log("CompleteStudentProfilePage: Waiting for profile to load...")
       }
     }
   }, [user, profile, authLoading, router, toast])
-
-  // Helper function to get dashboard path, similar to AuthContext
-  // This is to avoid importing AuthContext's getDashboardPath if it causes circular dependencies
-  // or if we want to keep this component more self-contained for redirection logic.
-  const getDashboardPath = (userType?: Profile["user_type"]) => {
-    switch (userType) {
-      case "student":
-        return "/"
-      case "professional":
-        return "/professional/dashboard"
-      case "corporate":
-        return "/corporate/dashboard"
-      case "university":
-        return "/university/dashboard"
-      default:
-        return "/"
-    }
-  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -173,7 +144,7 @@ export default function CompleteStudentProfilePage() {
     try {
       const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(filePath, avatarFile, {
         cacheControl: "3600",
-        upsert: true, // Changed to true to allow overwriting if user uploads multiple times before saving profile
+        upsert: false,
       })
 
       if (uploadError) {
@@ -246,9 +217,9 @@ export default function CompleteStudentProfilePage() {
 
     try {
       const updates: Partial<Profile> = {
-        ...formData,
+        ...formData, // formData should now only contain valid fields
         avatar_url: uploadedAvatarUrl,
-        is_profile_complete: true, // Set profile as complete
+        is_profile_complete: true,
         updated_at: new Date().toISOString(),
       }
 
@@ -259,7 +230,7 @@ export default function CompleteStudentProfilePage() {
         toast({ title: "Error", description: `Failed to update profile: ${error.message}`, variant: "destructive" })
       } else {
         toast({ title: "Profile Updated!", description: "Your student profile is now complete." })
-        await refreshProfile() // This will trigger AuthContext to re-evaluate and redirect
+        await refreshProfile() // This triggers AuthContext to re-evaluate and redirect
       }
     } catch (err: any) {
       console.error("Unexpected error:", err)
@@ -277,17 +248,15 @@ export default function CompleteStudentProfilePage() {
     )
   }
 
-  // This check is now more robust in the useEffect, but as a final render check:
-  if (!user || (profile && profile.user_type !== "student" && profile.is_profile_complete === false)) {
-    // If somehow reached here and not a student needing completion, show generic message or redirect
+  if (!user || (profile && profile.user_type !== "student")) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4 text-center">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Loading or Access Issue</CardTitle>
+            <CardTitle>Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Please wait or ensure you have access.</p>
+            <p>This page is for student profile completion. You will be redirected.</p>
           </CardContent>
         </Card>
       </div>
@@ -313,12 +282,11 @@ export default function CompleteStudentProfilePage() {
               <div className="flex items-center gap-4">
                 {avatarPreview ? (
                   <Image
-                    src={avatarPreview || "/placeholder.svg?width=80&height=80&text=Avatar"}
+                    src={avatarPreview || "/placeholder.svg?width=80&height=80&query=avatar"}
                     alt="Avatar preview"
                     width={80}
                     height={80}
                     className="rounded-full object-cover aspect-square"
-                    onError={() => setAvatarPreview("/placeholder.svg?width=80&height=80&text=Error")}
                   />
                 ) : (
                   <UserCircle className="h-20 w-20 text-gray-400" />
@@ -347,7 +315,6 @@ export default function CompleteStudentProfilePage() {
                     </Button>
                   )}
                 </div>
-
                 <Input
                   id="avatar-upload"
                   ref={fileInputRef}
