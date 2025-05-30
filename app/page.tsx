@@ -14,28 +14,23 @@ import type { PostWithAuthor } from "@/lib/supabase/types"
 
 import { CreatePostDialog } from "@/components/create-post-dialog"
 import { SearchDialog } from "@/components/search-dialog"
-import { NotificationsPopover } from "@/components/notifications-popover" // Updated import
+import { NotificationsPopover } from "@/components/notifications-popover"
 
 export default function Home() {
-  const { user, profile, loading: authLoading } = useAuth() // Added profile here
+  const { user, profile, loading } = useAuth()
   const [posts, setPosts] = useState<PostWithAuthor[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false) // State for popover
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
 
   useEffect(() => {
     const fetchPosts = async () => {
       setLoadingPosts(true)
       const { data, error } = await supabase
         .from("posts")
-        .select(
-          `
-          *,
-          author:profiles!user_id(*)
-        `,
-        )
+        .select(`*, author:profiles!user_id(*)`)
         .order("created_at", { ascending: false })
         .limit(20)
 
@@ -48,7 +43,10 @@ export default function Home() {
       setLoadingPosts(false)
     }
 
-    fetchPosts()
+    // Only fetch posts if we have a user or if we're not loading auth
+    if (!loading) {
+      fetchPosts()
+    }
 
     const postChannel = supabase
       .channel("realtime-posts-home")
@@ -72,10 +70,10 @@ export default function Home() {
     return () => {
       supabase.removeChannel(postChannel)
     }
-  }, [])
+  }, [loading])
 
-  if (authLoading && !user) {
-    // Show loader only if auth is loading AND user is not yet available
+  // Show loading only during initial auth check
+  if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -110,22 +108,16 @@ export default function Home() {
             <span className="sr-only">Search</span>
           </Button>
 
-          {user && ( // Only show notifications if user is logged in
+          {user && (
             <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="relative"
-                // onClick is handled by PopoverTrigger now
-              >
+              <Button size="icon" variant="ghost" className="relative">
                 <BellIcon className="h-5 w-5" />
-                {/* Badge count can be fetched here or from a context if needed globally in header */}
                 <span className="sr-only">Notifications</span>
               </Button>
             </NotificationsPopover>
           )}
 
-          {user && ( // Only show messages link if user is logged in
+          {user && (
             <Link href="/messages">
               <Button size="icon" variant="ghost" className="relative">
                 <MessageSquareIcon className="h-5 w-5" />
@@ -134,7 +126,7 @@ export default function Home() {
             </Link>
           )}
 
-          {user && ( // Only show create post button if user is logged in
+          {user && (
             <Button
               size="icon"
               className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
@@ -146,7 +138,7 @@ export default function Home() {
           )}
 
           <div className="flex items-center gap-2">
-            {user && profile ? ( // Check for profile as well
+            {user && profile ? (
               <Link href="/profile">
                 <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
                   <img
@@ -158,7 +150,7 @@ export default function Home() {
                   <span className="sr-only">Profile</span>
                 </Button>
               </Link>
-            ) : !user && !authLoading ? ( // Show login only if not loading and no user
+            ) : !user && !loading ? (
               <Link href="/login">
                 <Button variant="outline" size="sm" className="hidden md:flex">
                   Login
@@ -196,7 +188,6 @@ export default function Home() {
       </main>
       <CreatePostDialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
       <SearchDialog open={isSearchOpen} onOpenChange={setIsSearchOpen} />
-      {/* NotificationsPopover is now triggered by its child button in the header */}
     </SidebarInset>
   )
 }

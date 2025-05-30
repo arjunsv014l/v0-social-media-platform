@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useEffect, useState, useRef } from "react"
-import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
@@ -42,11 +41,10 @@ type StudentProfileFormData = Pick<
 const AVATAR_BUCKET = "avatars"
 
 export default function CompleteStudentProfilePage() {
-  const { user, profile, refreshProfile, loading: authLoading, authChecked } = useAuth()
-  const router = useRouter()
+  const { user, profile, refreshProfile, loading } = useAuth()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const initializationRef = useRef(false)
+  const mountedRef = useRef(true)
 
   const [formData, setFormData] = useState<Partial<StudentProfileFormData>>({
     full_name: "",
@@ -59,63 +57,44 @@ export default function CompleteStudentProfilePage() {
     avatar_url: "",
   })
 
-  const [pageReady, setPageReady] = useState(false)
+  const [pageState, setPageState] = useState<"loading" | "ready" | "error">("loading")
+  const [errorMessage, setErrorMessage] = useState<string>("")
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Initialize page state - runs only once when conditions are met
+  // Initialize page state
   useEffect(() => {
-    console.log("[CompleteProfilePage] Initialization check:", {
-      authLoading,
-      authChecked,
-      user: !!user,
-      profile: profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
-      initializationRef: initializationRef.current,
-    })
-
-    // Don't initialize if already done
-    if (initializationRef.current) {
+    if (loading) {
+      setPageState("loading")
       return
     }
 
-    // Wait for auth to be ready
-    if (authLoading || !authChecked) {
-      console.log("[CompleteProfilePage] Waiting for auth to be ready...")
-      return
-    }
-
-    // Check if user exists
     if (!user) {
-      console.log("[CompleteProfilePage] No user found")
-      setError("Please log in to continue")
+      setPageState("error")
+      setErrorMessage("Please log in to continue")
       return
     }
 
-    // Wait for profile to load
     if (!profile) {
-      console.log("[CompleteProfilePage] Waiting for profile to load...")
+      setPageState("loading")
       return
     }
 
-    // Check if user is a student
     if (profile.user_type !== "student") {
-      console.log("[CompleteProfilePage] User is not a student:", profile.user_type)
-      setError("This page is only for student users")
+      setPageState("error")
+      setErrorMessage("This page is only for student users")
       return
     }
 
-    // Check if profile is already complete
     if (profile.is_profile_complete === true) {
-      console.log("[CompleteProfilePage] Profile already complete")
-      setError("Profile is already complete")
+      setPageState("error")
+      setErrorMessage("Profile is already complete")
       return
     }
 
-    // All checks passed - initialize the form
-    console.log("[CompleteProfilePage] Initializing form with profile data")
+    // Initialize form data
     setFormData({
       full_name: profile.full_name || "",
       username: profile.username || "",
@@ -131,10 +110,14 @@ export default function CompleteStudentProfilePage() {
       setAvatarPreview(profile.avatar_url)
     }
 
-    setPageReady(true)
-    initializationRef.current = true
-    console.log("[CompleteProfilePage] Page ready for user interaction")
-  }, [user, profile, authLoading, authChecked])
+    setPageState("ready")
+  }, [user, profile, loading])
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -169,7 +152,11 @@ export default function CompleteStudentProfilePage() {
 
       setAvatarFile(file)
       const reader = new FileReader()
-      reader.onloadend = () => setAvatarPreview(reader.result as string)
+      reader.onloadend = () => {
+        if (mountedRef.current) {
+          setAvatarPreview(reader.result as string)
+        }
+      }
       reader.readAsDataURL(file)
     }
   }
@@ -207,7 +194,9 @@ export default function CompleteStudentProfilePage() {
       })
       return null
     } finally {
-      setIsUploadingAvatar(false)
+      if (mountedRef.current) {
+        setIsUploadingAvatar(false)
+      }
     }
   }
 
@@ -275,7 +264,7 @@ export default function CompleteStudentProfilePage() {
         description: "Your student profile is now complete.",
       })
 
-      // Refresh profile data which will trigger AuthContext redirection
+      // Refresh profile data
       await refreshProfile()
     } catch (err: any) {
       console.error("Unexpected error:", err)
@@ -285,12 +274,14 @@ export default function CompleteStudentProfilePage() {
         variant: "destructive",
       })
     } finally {
-      setFormSubmitting(false)
+      if (mountedRef.current) {
+        setFormSubmitting(false)
+      }
     }
   }
 
-  // Show loading state
-  if (!pageReady && !error) {
+  // Loading state
+  if (pageState === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -301,8 +292,8 @@ export default function CompleteStudentProfilePage() {
     )
   }
 
-  // Show error state
-  if (error) {
+  // Error state
+  if (pageState === "error") {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -310,19 +301,14 @@ export default function CompleteStudentProfilePage() {
             <CardTitle className="text-center text-red-600">Access Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground">{error}</p>
+            <p className="text-center text-muted-foreground">{errorMessage}</p>
           </CardContent>
-          <CardFooter>
-            <Button onClick={() => router.push("/")} className="w-full">
-              Go to Dashboard
-            </Button>
-          </CardFooter>
         </Card>
       </div>
     )
   }
 
-  // Show the form
+  // Form state
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl shadow-xl">
