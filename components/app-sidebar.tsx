@@ -44,68 +44,32 @@ import { NotificationsPopover } from "@/components/notifications-popover"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useToast } from "@/components/ui/use-toast" // Add this import
+import { useToast } from "@/components/ui/use-toast"
 
 const navigationItems = [
-  {
-    title: "Home",
-    url: "/",
-    icon: HomeIcon,
-  },
-  {
-    title: "Profile",
-    url: "/profile",
-    icon: UserIcon,
-  },
-  {
-    title: "Friends",
-    url: "/friends",
-    icon: UsersIcon,
-    badge: "friendRequests",
-  },
-  {
-    title: "Messages",
-    url: "/messages",
-    icon: MessageSquareIcon,
-    badge: "unreadMessages",
-  },
-  {
-    title: "Events",
-    url: "/events",
-    icon: CalendarIcon,
-  },
-  {
-    title: "Courses",
-    url: "/courses",
-    icon: BookOpenIcon,
-  },
-  {
-    title: "Create",
-    url: "/create",
-    icon: VideoIcon,
-  },
+  { title: "Home", url: "/", icon: HomeIcon },
+  { title: "Profile", url: "/profile", icon: UserIcon },
+  { title: "Friends", url: "/friends", icon: UsersIcon, badge: "friendRequests" },
+  { title: "Messages", url: "/messages", icon: MessageSquareIcon, badge: "unreadMessages" },
+  { title: "Events", url: "/events", icon: CalendarIcon },
+  { title: "Courses", url: "/courses", icon: BookOpenIcon },
+  { title: "Create", url: "/create", icon: VideoIcon },
 ]
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth() // signOut is from AuthContext
   const { setTheme } = useTheme()
-  const { toast } = useToast() // Initialize toast
+  const { toast } = useToast()
 
-  const [badges, setBadges] = useState({
-    friendRequests: 0,
-    unreadMessages: 0,
-    notifications: 0,
-  })
+  const [badges, setBadges] = useState({ friendRequests: 0, unreadMessages: 0, notifications: 0 })
   const [createPostOpen, setCreatePostOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
-
   const [loadingSignOut, setLoadingSignOut] = useState(false)
 
   useEffect(() => {
     if (!user) return
-
     const fetchBadgeData = async (type: keyof typeof badges) => {
       let query
       switch (type) {
@@ -136,11 +100,9 @@ export function AppSidebar() {
       const { count } = await query
       setBadges((prev) => ({ ...prev, [type]: count || 0 }))
     }
-
     fetchBadgeData("friendRequests")
     fetchBadgeData("unreadMessages")
     fetchBadgeData("notifications")
-
     const channels = supabase
       .channel(`realtime-badges-${user.id}`)
       .on(
@@ -157,15 +119,12 @@ export function AppSidebar() {
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
         (payload) => {
-          if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new.read === false)) {
+          if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new.read === false))
             fetchBadgeData("notifications")
-          } else if (payload.eventType === "UPDATE" && payload.new.read === true) {
-            fetchBadgeData("notifications")
-          }
+          else if (payload.eventType === "UPDATE" && payload.new.read === true) fetchBadgeData("notifications")
         },
       )
       .subscribe()
-
     return () => {
       supabase.removeChannel(channels)
     }
@@ -174,8 +133,8 @@ export function AppSidebar() {
   const handleSignOut = async () => {
     setLoadingSignOut(true)
     try {
-      await signOut() // This calls the signOut from AuthContext
-      // Redirection is now primarily handled within AuthContext's signOut
+      await signOut() // Call the revised signOut from AuthContext
+      // The redirection and state clearing are now primarily handled by AuthContext's reactive flow
       toast({
         title: "Signed Out",
         description: "You have been successfully signed out.",
@@ -192,9 +151,7 @@ export function AppSidebar() {
     }
   }
 
-  if (pathname === "/login" || pathname === "/signup") {
-    return null
-  }
+  if (pathname === "/login" || pathname === "/signup") return null
 
   return (
     <>
@@ -210,7 +167,6 @@ export function AppSidebar() {
             </div>
           </div>
         </SidebarHeader>
-
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Navigation</SidebarGroupLabel>
@@ -234,7 +190,6 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-
           <SidebarGroup>
             <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -267,7 +222,6 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-
           <SidebarGroup>
             <SidebarGroupLabel>Account</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -284,7 +238,6 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-
         <SidebarFooter className="border-t border-sidebar-border">
           <SidebarMenu>
             <SidebarMenuItem>
@@ -349,7 +302,6 @@ export function AppSidebar() {
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-
       <CreatePostDialog open={createPostOpen} onOpenChange={setCreatePostOpen} />
       <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </>
