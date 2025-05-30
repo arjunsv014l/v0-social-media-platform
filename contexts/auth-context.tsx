@@ -55,14 +55,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user?.id, fetchProfile])
 
-  const getDashboardPath = useCallback((userType?: string) => {
+  const getDashboardPath = useCallback((userType?: Profile["user_type"]) => {
     switch (userType) {
       case "student":
-        return "/"
+        return "/" // Student dashboard is the main feed
       case "professional":
         return "/professional/dashboard"
       case "corporate":
         return "/corporate/dashboard"
+      case "university":
+        return "/university/dashboard" // Assuming a university dashboard path
       default:
         console.warn("AuthContext: Unknown user type for dashboard path:", userType)
         return "/"
@@ -112,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null)
       }
       setLoading(false)
-      setAuthChecked(true) // Ensure authChecked is true after any state change
+      setAuthChecked(true)
       console.log("AuthContext: Auth state change processed. Loading:", false)
     })
     return () => {
@@ -141,14 +143,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (user) {
       if (profile) {
-        if (!profile.is_profile_complete) {
+        if (profile.is_profile_complete === false) {
+          // Explicitly check for false
           if (!isProfileCompletePage) {
             console.log("AuthContext: User logged in, profile incomplete. Redirecting to:", profileCompletionPath)
             router.push(profileCompletionPath)
           } else {
             console.log("AuthContext: User on profile completion page.")
           }
-        } else {
+        } else if (profile.is_profile_complete === true) {
+          // Explicitly check for true
           const dashboardPath = getDashboardPath(profile.user_type)
           if (isAuthPage || isProfileCompletePage) {
             console.log(
@@ -157,23 +161,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             )
             router.push(dashboardPath)
           } else {
-            if (pathname !== dashboardPath && !pathname.startsWith("/api")) {
-              const currentBaseDashboard = pathname.split("/")[1]
-              const targetBaseDashboard = dashboardPath.split("/")[1]
-              if (dashboardPath !== "/" && currentBaseDashboard !== targetBaseDashboard && profile.user_type) {
-                console.log(`AuthContext: User on wrong dashboard type (${pathname}), redirecting to ${dashboardPath}`)
-                router.push(dashboardPath)
-              } else {
-                console.log(
-                  "AuthContext: User logged in, profile complete. On a valid page or their dashboard:",
-                  dashboardPath,
-                )
-              }
+            // Optional: Redirect if on the wrong dashboard type
+            const currentBase = pathname.split("/")[1] || ""
+            const targetBase = dashboardPath.split("/")[1] || ""
+            if (targetBase && currentBase !== targetBase && dashboardPath !== "/" && !pathname.startsWith("/api")) {
+              console.log(`AuthContext: User on wrong dashboard type (${pathname}), redirecting to ${dashboardPath}`)
+              router.push(dashboardPath)
+            } else {
+              console.log("AuthContext: User logged in, profile complete. On a valid page or their dashboard.")
             }
+          }
+        } else {
+          // is_profile_complete is null or undefined, treat as incomplete or wait for profile to fully load
+          console.log("AuthContext: Profile's is_profile_complete status is unclear. Assuming incomplete or waiting.")
+          if (!isProfileCompletePage && !isAuthPage) {
+            // Avoid redirect loops if already on complete/auth page
+            router.push(profileCompletionPath)
           }
         }
       } else {
         console.log("AuthContext: User logged in, but profile is null. Waiting for profile.")
+        // Potentially redirect to /profile/complete if profile remains null after a timeout,
+        // or if it's a new user (though signup should create a basic profile).
       }
     } else {
       // No user (logged out)
@@ -221,12 +230,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const profileToInsert: Partial<Profile> & { id: string; user_type: Profile["user_type"] } = {
         id: authData.user.id,
-        email: authData.user.email,
+        // email: authData.user.email, // email is already in auth.users, not typically duplicated in profiles
         full_name: `${userData.firstName} ${userData.lastName}`,
         username: userData.username || email.split("@")[0] + Math.random().toString(36).substring(2, 7),
         user_type: userData.userType,
-        is_profile_complete: false,
+        is_profile_complete: false, // CRUCIAL: New profiles are incomplete
         updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       }
       if (userData.userType === "student") {
         profileToInsert.university = userData.university
@@ -238,8 +248,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profileToInsert.company = userData.company
         profileToInsert.industry = userData.industry
       } else if (userData.userType === "corporate") {
-        profileToInsert.company_name = userData.companyName
-        profileToInsert.company_website = userData.companyWebsite
+        profileToInsert.organization_name = userData.companyName // Assuming companyName maps to organization_name
+        profileToInsert.contact_email = userData.companyEmail // Assuming companyEmail maps to contact_email
+        profileToInsert.organization_type = "corporate"
+      } else if (userData.userType === "university") {
+        profileToInsert.organization_name = userData.universityName // Assuming universityName maps to organization_name
+        profileToInsert.contact_email = userData.universityEmail // Assuming universityEmail maps to contact_email
+        profileToInsert.organization_type = "university"
       }
 
       const { error: profileError } = await supabase.from("profiles").insert(profileToInsert as Profile)

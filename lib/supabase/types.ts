@@ -7,9 +7,9 @@ export interface Profile {
   username?: string
   full_name?: string
   avatar_url?: string
-  // website?: string // This line is now removed
+  // website?: string // Removed as per previous request
   user_type?: "student" | "professional" | "corporate" | "university"
-  is_profile_complete?: boolean
+  is_profile_complete?: boolean // Ensure this line is present and uncommented
 
   // Student specific (can be null for other types)
   university?: string
