@@ -15,7 +15,6 @@ import { supabase } from "@/lib/supabase/client"
 import type { Profile } from "@/lib/supabase/types"
 import { useToast } from "@/components/ui/use-toast"
 
-// Mock data for dropdowns
 const universities = ["SIMATS", "VIT", "SRM", "Stanford University", "MIT", "Harvard University", "Other"]
 const majors = [
   "Computer Science",
@@ -40,13 +39,14 @@ type StudentProfileFormData = Pick<
   | "avatar_url"
 >
 
-const AVATAR_BUCKET = "avatars" // Ensure this matches your Supabase storage bucket name
+const AVATAR_BUCKET = "avatars"
 
 export default function CompleteStudentProfilePage() {
   const { user, profile, refreshProfile, loading: authLoading, authChecked } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const initializationRef = useRef(false)
 
   const [formData, setFormData] = useState<Partial<StudentProfileFormData>>({
     full_name: "",
@@ -58,153 +58,171 @@ export default function CompleteStudentProfilePage() {
     contact_phone: "",
     avatar_url: "",
   })
-  const [pageLoading, setPageLoading] = useState(true)
+
+  const [pageReady, setPageReady] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Local getDashboardPath to avoid context dependency if not needed for this page's core logic
-  const getDashboardPath = (userType?: Profile["user_type"]) => {
-    switch (userType) {
-      case "student":
-        return "/"
-      case "professional":
-        return "/professional/dashboard"
-      case "corporate":
-        return "/corporate/dashboard"
-      case "university":
-        return "/university/dashboard"
-      default:
-        return "/"
+  // Initialize page state - runs only once when conditions are met
+  useEffect(() => {
+    console.log("[CompleteProfilePage] Initialization check:", {
+      authLoading,
+      authChecked,
+      user: !!user,
+      profile: profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
+      initializationRef: initializationRef.current,
+    })
+
+    // Don't initialize if already done
+    if (initializationRef.current) {
+      return
     }
+
+    // Wait for auth to be ready
+    if (authLoading || !authChecked) {
+      console.log("[CompleteProfilePage] Waiting for auth to be ready...")
+      return
+    }
+
+    // Check if user exists
+    if (!user) {
+      console.log("[CompleteProfilePage] No user found")
+      setError("Please log in to continue")
+      return
+    }
+
+    // Wait for profile to load
+    if (!profile) {
+      console.log("[CompleteProfilePage] Waiting for profile to load...")
+      return
+    }
+
+    // Check if user is a student
+    if (profile.user_type !== "student") {
+      console.log("[CompleteProfilePage] User is not a student:", profile.user_type)
+      setError("This page is only for student users")
+      return
+    }
+
+    // Check if profile is already complete
+    if (profile.is_profile_complete === true) {
+      console.log("[CompleteProfilePage] Profile already complete")
+      setError("Profile is already complete")
+      return
+    }
+
+    // All checks passed - initialize the form
+    console.log("[CompleteProfilePage] Initializing form with profile data")
+    setFormData({
+      full_name: profile.full_name || "",
+      username: profile.username || "",
+      university: profile.university || "",
+      major: profile.major || "",
+      graduation_year: profile.graduation_year || "",
+      student_id_number: profile.student_id_number || "",
+      contact_phone: profile.contact_phone || "",
+      avatar_url: profile.avatar_url || "",
+    })
+
+    if (profile.avatar_url) {
+      setAvatarPreview(profile.avatar_url)
+    }
+
+    setPageReady(true)
+    initializationRef.current = true
+    console.log("[CompleteProfilePage] Page ready for user interaction")
+  }, [user, profile, authLoading, authChecked])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  useEffect(() => {
-    console.log(
-      "[CompleteProfilePage] useEffect. AuthLoading:",
-      authLoading,
-      "AuthChecked:",
-      authChecked,
-      "User:",
-      !!user,
-      "Profile:",
-      profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
-    )
-
-    if (authLoading || !authChecked) {
-      console.log("[CompleteProfilePage] Waiting for auth context to initialize...")
-      setPageLoading(true) // Keep showing page loader
-      return
-    }
-
-    // Auth is checked and not loading
-    if (!user) {
-      console.log("[CompleteProfilePage] No user after auth check, redirecting to /login")
-      router.replace("/login")
-      return
-    }
-
-    // User is logged in
-    if (profile) {
-      console.log("[CompleteProfilePage] Profile is available.")
-      if (profile.is_profile_complete === true) {
-        console.log(
-          "[CompleteProfilePage] Profile already complete. Redirecting to dashboard:",
-          getDashboardPath(profile.user_type),
-        )
-        router.replace(getDashboardPath(profile.user_type))
-        return
-      }
-      if (profile.user_type !== "student") {
-        console.log("[CompleteProfilePage] User is not a student. Redirecting.")
-        toast({ title: "Access Denied", description: "Profile completion is for students.", variant: "destructive" })
-        router.replace(getDashboardPath(profile.user_type))
-        return
-      }
-
-      // Student with incomplete profile - good to show the form
-      console.log("[CompleteProfilePage] Student with incomplete profile. Setting form data.")
-      setFormData({
-        full_name: profile.full_name || "",
-        username: profile.username || "",
-        university: profile.university || "",
-        major: profile.major || "",
-        graduation_year: profile.graduation_year || "",
-        student_id_number: profile.student_id_number || "",
-        contact_phone: profile.contact_phone || "",
-        avatar_url: profile.avatar_url || "",
-      })
-      if (profile.avatar_url) setAvatarPreview(profile.avatar_url)
-      setPageLoading(false) // Ready to show form
-    } else {
-      // User is logged in, but profile is still null (after authLoading is false and authChecked is true)
-      // This implies profile data is still being fetched or wasn't found.
-      // AuthContext's redirection useEffect should handle pushing to /profile/complete if needed.
-      // This page should just wait by showing its loader.
-      console.log(
-        "[CompleteProfilePage] User logged in, but profile is null. Waiting for profile data to load via AuthContext.",
-      )
-      setPageLoading(true)
-    }
-  }, [user, profile, authLoading, authChecked, router, toast])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  const handleSelectChange = (name: keyof StudentProfileFormData, value: string) =>
+  const handleSelectChange = (name: keyof StudentProfileFormData, value: string) => {
     setFormData({ ...formData, [name]: value })
+  }
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
       const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
       if (!allowedTypes.includes(file.type)) {
-        toast({ title: "Invalid File Type", variant: "destructive" })
+        toast({
+          title: "Invalid File Type",
+          description: "Please select a JPG, PNG, GIF or WEBP image.",
+          variant: "destructive",
+        })
         return
       }
+
       const maxSize = 5 * 1024 * 1024 // 5MB
       if (file.size > maxSize) {
-        toast({ title: "File Too Large", variant: "destructive" })
+        toast({
+          title: "File Too Large",
+          description: "Image size should not exceed 5MB.",
+          variant: "destructive",
+        })
         return
       }
+
       setAvatarFile(file)
       const reader = new FileReader()
       reader.onloadend = () => setAvatarPreview(reader.result as string)
       reader.readAsDataURL(file)
     }
   }
+
   const handleAvatarUpload = async () => {
     if (!avatarFile || !user) return null
+
     setIsUploadingAvatar(true)
     const fileExt = avatarFile.name.split(".").pop()
-    const fileName = `${user.id}-${Date.now()}.${fileExt}` // More unique filename
+    const fileName = `${user.id}-${Date.now()}.${fileExt}`
     const filePath = `${user.id}/${fileName}`
 
     try {
       const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(filePath, avatarFile, {
         cacheControl: "3600",
-        upsert: true, // Allow overwrite if user tries multiple times
+        upsert: true,
       })
+
       if (uploadError) throw uploadError
+
       const { data: publicUrlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(filePath)
-      if (!publicUrlData?.publicUrl) throw new Error("Could not get public URL.")
-      toast({ title: "Avatar Uploaded" })
+
+      if (!publicUrlData?.publicUrl) {
+        throw new Error("Could not get public URL for avatar.")
+      }
+
+      toast({ title: "Avatar Uploaded", description: "Your new avatar is ready." })
       return publicUrlData.publicUrl
     } catch (error: any) {
-      toast({ title: "Avatar Upload Failed", description: error.message, variant: "destructive" })
+      console.error("Error uploading avatar:", error)
+      toast({
+        title: "Avatar Upload Failed",
+        description: error.message || "Could not upload image.",
+        variant: "destructive",
+      })
       return null
     } finally {
       setIsUploadingAvatar(false)
     }
   }
+
   const removeAvatarPreview = () => {
     setAvatarFile(null)
     setAvatarPreview(formData.avatar_url || null)
-    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
+
     if (
       !formData.full_name ||
       !formData.username ||
@@ -212,48 +230,99 @@ export default function CompleteStudentProfilePage() {
       !formData.major ||
       !formData.graduation_year
     ) {
-      toast({ title: "Missing Required Fields", variant: "destructive" })
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields (*).",
+        variant: "destructive",
+      })
       return
     }
 
     setFormSubmitting(true)
     let uploadedAvatarUrl = formData.avatar_url
-    if (avatarFile) {
-      const newUrl = await handleAvatarUpload()
-      if (newUrl) uploadedAvatarUrl = newUrl
-      // else: avatar upload failed, proceed with old/no avatar or handle error more strictly
-    }
 
     try {
+      // Upload avatar if there's a new file
+      if (avatarFile) {
+        const newUrl = await handleAvatarUpload()
+        if (newUrl) {
+          uploadedAvatarUrl = newUrl
+        }
+      }
+
+      // Update profile
       const updates: Partial<Profile> = {
         ...formData,
         avatar_url: uploadedAvatarUrl,
-        is_profile_complete: true, // Mark as complete
+        is_profile_complete: true,
         updated_at: new Date().toISOString(),
       }
+
       const { error } = await supabase.from("profiles").update(updates).eq("id", user.id)
-      if (error) throw error
-      toast({ title: "Profile Updated!" })
-      await refreshProfile() // This will trigger AuthContext to re-evaluate and redirect
-    } catch (error: any) {
-      console.error("Error updating profile:", error)
-      toast({ title: "Profile Update Failed", description: error.message, variant: "destructive" })
+
+      if (error) {
+        console.error("Error updating profile:", error)
+        toast({
+          title: "Error",
+          description: `Failed to update profile: ${error.message}`,
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Profile Updated!",
+        description: "Your student profile is now complete.",
+      })
+
+      // Refresh profile data which will trigger AuthContext redirection
+      await refreshProfile()
+    } catch (err: any) {
+      console.error("Unexpected error:", err)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred.",
+        variant: "destructive",
+      })
     } finally {
       setFormSubmitting(false)
     }
   }
 
-  if (pageLoading) {
-    // Use page-specific loading state
+  // Show loading state
+  if (!pageReady && !error) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-2">Loading profile...</p>
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
       </div>
     )
   }
 
-  // If pageLoading is false, it means all checks in useEffect passed for showing the form
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center text-red-600">Access Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-center text-muted-foreground">{error}</p>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={() => router.push("/")} className="w-full">
+              Go to Dashboard
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show the form
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl shadow-xl">
@@ -273,7 +342,7 @@ export default function CompleteStudentProfilePage() {
               <div className="flex items-center gap-4">
                 {avatarPreview ? (
                   <Image
-                    src={avatarPreview || "/placeholder.svg?width=80&height=80&query=avatar"}
+                    src={avatarPreview || "/placeholder.svg"}
                     alt="Avatar preview"
                     width={80}
                     height={80}
@@ -290,7 +359,8 @@ export default function CompleteStudentProfilePage() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingAvatar || formSubmitting}
                   >
-                    <UploadCloud className="mr-2 h-4 w-4" /> {avatarFile ? "Change Picture" : "Upload Picture"}
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    {avatarFile ? "Change Picture" : "Upload Picture"}
                   </Button>
                   {avatarPreview && avatarFile && (
                     <Button
@@ -301,7 +371,8 @@ export default function CompleteStudentProfilePage() {
                       disabled={isUploadingAvatar || formSubmitting}
                       className="text-xs text-red-500 hover:text-red-600"
                     >
-                      <XCircle className="mr-1 h-3 w-3" /> Remove Selected
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Remove Selected
                     </Button>
                   )}
                 </div>
