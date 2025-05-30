@@ -16,7 +16,7 @@ export interface Database {
           university: string | null
           created_at: string
           updated_at: string
-          is_profile_complete: boolean // Added field
+          is_profile_complete: boolean
         }
         Insert: {
           id: string
@@ -30,7 +30,7 @@ export interface Database {
           university?: string | null
           created_at?: string
           updated_at?: string
-          is_profile_complete?: boolean // Added field
+          is_profile_complete?: boolean
         }
         Update: {
           id?: string
@@ -44,7 +44,7 @@ export interface Database {
           university?: string | null
           created_at?: string
           updated_at?: string
-          is_profile_complete?: boolean // Added field
+          is_profile_complete?: boolean
         }
       }
       posts: {
@@ -296,6 +296,59 @@ export interface Database {
           created_at?: string
         }
       }
+      content: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string | null
+          content_type: string
+          file_url: string
+          thumbnail_url: string | null
+          duration: number | null
+          file_size: number | null
+          tags: string[] | null
+          is_public: boolean
+          view_count: number
+          like_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string | null
+          content_type: string
+          file_url: string
+          thumbnail_url?: string | null
+          duration?: number | null
+          file_size?: number | null
+          tags?: string[] | null
+          is_public?: boolean
+          view_count?: number
+          like_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string | null
+          content_type?: string
+          file_url?: string
+          thumbnail_url?: string | null
+          duration?: number | null
+          file_size?: number | null
+          tags?: string[] | null
+          is_public?: boolean
+          view_count?: number
+          like_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -333,7 +386,7 @@ export interface Profile {
   university?: string | null
   created_at: string
   updated_at: string
-  is_profile_complete: boolean // Added field
+  is_profile_complete: boolean
 }
 
 export interface Event {
@@ -348,4 +401,22 @@ export interface Event {
   creator_id: string
   attendees_count: number
   created_at: string
+}
+
+export interface Content {
+  id: string
+  user_id: string
+  title: string
+  description?: string | null
+  content_type: string
+  file_url: string
+  thumbnail_url?: string | null
+  duration?: number | null
+  file_size?: number | null
+  tags?: string[] | null
+  is_public: boolean
+  view_count: number
+  like_count: number
+  created_at: string
+  updated_at: string
 }
