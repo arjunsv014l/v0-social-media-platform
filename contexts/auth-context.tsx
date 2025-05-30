@@ -120,55 +120,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [fetchProfile])
 
-  // Effect for handling redirection based on profile completion and user type
+  // Effect for handling redirection based on auth state, profile completion, and user type
   useEffect(() => {
-    // Only proceed if we're not loading and auth has been checked
-    if (loading || !authChecked) return
+    if (loading || !authChecked) {
+      console.log("AuthContext: Still loading or auth not checked, skipping redirect.")
+      return
+    }
 
-    // If user is not authenticated, don't redirect
-    if (!user) return
+    const isAuthPage = publicPaths.includes(pathname)
+    const isProfileCompletePage = pathname === profileCompletionPath
 
-    // If we don't have profile data yet, wait for it
-    if (!profile) return
-
-    console.log("Auth redirect check:", {
+    console.log("AuthContext: Redirect check", {
       user: !!user,
       profile: !!profile,
       userType: profile?.user_type,
       isProfileComplete: profile?.is_profile_complete,
       currentPath: pathname,
+      isAuthPage,
+      isProfileCompletePage,
     })
 
-    // If profile is not complete and user is not on public paths or profile completion path
-    if (!profile.is_profile_complete && !publicPaths.includes(pathname) && pathname !== profileCompletionPath) {
-      console.log("Redirecting to profile completion")
-      router.push(profileCompletionPath)
-    }
-    // If profile is complete and user is on profile completion path, redirect to appropriate dashboard
-    else if (profile.is_profile_complete && pathname === profileCompletionPath) {
-      const dashboardPath = getDashboardPath(profile.user_type || "student")
-      console.log("Redirecting to dashboard:", dashboardPath)
-      router.push(dashboardPath)
-    }
-    // If profile is complete and user is on login/signup, redirect to appropriate dashboard
-    else if (profile.is_profile_complete && publicPaths.includes(pathname)) {
-      const dashboardPath = getDashboardPath(profile.user_type || "student")
-      console.log("Redirecting authenticated user to dashboard:", dashboardPath)
-      router.push(dashboardPath)
-    }
-    // ADDED: Add redirection to handle the case where someone accesses the wrong dashboard
-    else if (profile.is_profile_complete && profile.user_type) {
-      const correctDashboardPath = getDashboardPath(profile.user_type)
-
-      // Check if the user is on the wrong dashboard
-      if (
-        (profile.user_type === "student" &&
-          (pathname.startsWith("/professional") || pathname.startsWith("/corporate"))) ||
-        (profile.user_type === "professional" && (pathname === "/" || pathname.startsWith("/corporate"))) ||
-        (profile.user_type === "corporate" && (pathname === "/" || pathname.startsWith("/professional")))
-      ) {
-        console.log(`Redirecting ${profile.user_type} from wrong dashboard to: ${correctDashboardPath}`)
-        router.push(correctDashboardPath)
+    if (user && profile) {
+      // User is logged in and profile is available
+      if (!profile.is_profile_complete) {
+        if (!isProfileCompletePage) {
+          console.log("AuthContext: Profile incomplete, redirecting to", profileCompletionPath)
+          router.push(profileCompletionPath)
+        }
+      } else {
+        // Profile is complete
+        const dashboardPath = getDashboardPath(profile.user_type || "student")
+        if (isAuthPage || isProfileCompletePage) {
+          console.log("AuthContext: Profile complete, on auth/complete page, redirecting to dashboard:", dashboardPath)
+          router.push(dashboardPath)
+        } else {
+          // Optional: If user is on a path not matching their dashboard, redirect.
+          // This can be aggressive, so consider if it's needed.
+          // For now, let's assume if they are on other valid pages, they can stay.
+          // Example: if (pathname !== dashboardPath && !pathname.startsWith(dashboardPath)) {
+          //   router.push(dashboardPath);
+          // }
+          console.log("AuthContext: Profile complete, user on a valid page or their dashboard.")
+        }
+      }
+    } else if (!user) {
+      // User is not logged in
+      if (!isAuthPage && !isProfileCompletePage) {
+        // Allow access to profile/complete if a direct link is somehow accessed without auth
+        console.log("AuthContext: No user, not on auth page, redirecting to /login")
+        router.push("/login")
       }
     }
   }, [user, profile, loading, authChecked, pathname, router, getDashboardPath])
@@ -239,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  console.log("AuthContext Provider rendering with state:", { user, profile, loading, authChecked })
   return (
     <AuthContext.Provider value={{ user, profile, loading, authChecked, signIn, signUp, signOut, refreshProfile }}>
       {children}

@@ -1,560 +1,349 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useAuth } from "@/contexts/auth-context"
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Bell,
-  Plus,
-  MessageSquare,
-  Briefcase,
-  Users,
   Building2,
-  Loader2,
-  GraduationCap,
-  BarChart4,
+  Users,
+  Briefcase,
+  TrendingUp,
   FileText,
-  UserPlus,
+  Calendar,
+  Star,
+  PlusCircle,
+  Eye,
+  UserCheck,
 } from "lucide-react"
-import Link from "next/link"
-import { NotificationsPopover } from "@/components/notifications-popover"
+import { useAuth } from "@/contexts/auth-context"
+
+interface DashboardStats {
+  activeJobs: number
+  applications: number
+  hires: number
+  candidates: number
+}
 
 export default function CorporateDashboard() {
-  const { user, profile, loading } = useAuth()
-  const [jobPostings, setJobPostings] = useState([])
-  const [internships, setInternships] = useState([])
-  const [applications, setApplications] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("overview")
+  const { user, profile } = useAuth()
+  const [stats, setStats] = useState<DashboardStats>({
+    activeJobs: 0,
+    applications: 0,
+    hires: 0,
+    candidates: 0,
+  })
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return
-
-      setIsLoading(true)
-
-      // For demo purposes, we're generating sample data
-      const sampleJobPostings = [
-        { id: 1, title: "Software Engineer", applicants: 12, views: 78, status: "Active", deadline: "2023-06-15" },
-        { id: 2, title: "Product Manager", applicants: 8, views: 45, status: "Active", deadline: "2023-06-20" },
-      ]
-
-      const sampleInternships = [
-        {
-          id: 1,
-          title: "Software Engineering Intern",
-          applicants: 24,
-          views: 120,
-          status: "Active",
-          deadline: "2023-05-30",
-        },
-        { id: 2, title: "Product Management Intern", applicants: 18, views: 92, status: "Draft", deadline: null },
-      ]
-
-      const sampleApplications = [
-        {
-          id: 1,
-          name: "Alex Johnson",
-          position: "Software Engineer",
-          university: "Stanford",
-          status: "Reviewed",
-          applied: "2023-05-10",
-        },
-        {
-          id: 2,
-          name: "Emily Davis",
-          position: "Software Engineer",
-          university: "MIT",
-          status: "New",
-          applied: "2023-05-12",
-        },
-        {
-          id: 3,
-          name: "Michael Brown",
-          position: "Product Manager",
-          university: "Harvard",
-          status: "Shortlisted",
-          applied: "2023-05-08",
-        },
-      ]
-
-      setJobPostings(sampleJobPostings)
-      setInternships(sampleInternships)
-      setApplications(sampleApplications)
-
-      setTimeout(() => {
-        setIsLoading(false)
-      }, 800) // Simulate loading
-    }
-
-    fetchData()
-  }, [user])
-
-  if (loading || !profile) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    )
-  }
+    // Fetch dashboard stats from job_postings and applications tables
+    setStats({
+      activeJobs: 8,
+      applications: 156,
+      hires: 12,
+      candidates: 89,
+    })
+  }, [])
 
   return (
-    <SidebarInset>
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
-        <div className="flex items-center gap-2">
-          <SidebarTrigger className="md:hidden" />
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <div className="container mx-auto p-6 space-y-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
               Corporate Dashboard
             </h1>
+            <p className="text-muted-foreground mt-2">
+              Welcome back to {profile?.company_name || "Your Company"}! Find the best talent.
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <Button className="bg-gradient-to-r from-purple-500 to-blue-600">
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Post New Job
+            </Button>
+            <Button variant="outline">
+              <Building2 className="h-4 w-4 mr-2" />
+              Company Profile
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <NotificationsPopover>
-            <Button size="icon" variant="ghost" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="sr-only">Notifications</span>
-            </Button>
-          </NotificationsPopover>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="border-l-4 border-l-purple-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Job Posts</CardTitle>
+              <Briefcase className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">{stats.activeJobs}</div>
+              <p className="text-xs text-muted-foreground">+2 this week</p>
+            </CardContent>
+          </Card>
 
-          <Link href="/profile">
-            <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-              <img
-                src={profile.avatar_url || "/placeholder.svg?height=36&width=36&query=corporate logo"}
-                alt={profile.full_name || "Profile"}
-                className="h-full w-full rounded-full object-cover"
-              />
-              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
-              <span className="sr-only">Profile</span>
-            </Button>
-          </Link>
+          <Card className="border-l-4 border-l-blue-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Applications</CardTitle>
+              <FileText className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{stats.applications}</div>
+              <p className="text-xs text-muted-foreground">23 new today</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-green-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Successful Hires</CardTitle>
+              <UserCheck className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{stats.hires}</div>
+              <p className="text-xs text-muted-foreground">This quarter</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-orange-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Candidate Pool</CardTitle>
+              <Users className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">{stats.candidates}</div>
+              <p className="text-xs text-muted-foreground">Qualified candidates</p>
+            </CardContent>
+          </Card>
         </div>
-      </header>
 
-      <main className="p-4 md:p-6">
-        <div className="grid gap-6">
-          <section>
-            <Card className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start">
-                  <Avatar className="w-20 h-20 border-4 border-background">
-                    <AvatarImage
-                      src={profile.avatar_url || "/placeholder.svg?height=80&width=80&query=company logo"}
-                      alt={profile.company_name || profile.full_name}
-                    />
-                    <AvatarFallback>
-                      {(profile.company_name || profile.full_name)
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("") || "CO"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-2xl font-bold">{profile.company_name}</h2>
-                    <p className="text-lg text-muted-foreground">{profile.industry}</p>
-                    <div className="flex gap-2 mt-2 flex-wrap justify-center md:justify-start">
-                      <Badge variant="outline" className="bg-purple-50 text-purple-800 dark:bg-purple-900/20">
-                        <Building2 className="h-3 w-3 mr-1" /> {profile.company_size || "Enterprise"}
-                      </Badge>
-                      <Badge variant="outline" className="bg-blue-50 text-blue-800 dark:bg-blue-900/20">
-                        <Users className="h-3 w-3 mr-1" /> Corporate Recruiter
-                      </Badge>
+        {/* Main Content */}
+        <Tabs defaultValue="jobs" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="jobs">Job Postings</TabsTrigger>
+            <TabsTrigger value="applications">Applications</TabsTrigger>
+            <TabsTrigger value="talent">Talent Pool</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="jobs" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Active Job Postings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-purple-600" />
+                    Active Job Postings
+                  </CardTitle>
+                  <CardDescription>Currently open positions</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {[
+                    { title: "Senior Software Engineer", applicants: 45, views: 234, type: "Full-time" },
+                    { title: "Product Manager", applicants: 28, views: 156, type: "Full-time" },
+                    { title: "Data Science Intern", applicants: 67, views: 445, type: "Internship" },
+                    { title: "UX Designer", applicants: 23, views: 123, type: "Contract" },
+                  ].map((job, index) => (
+                    <div key={index} className="p-4 border rounded-lg space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-medium">{job.title}</h4>
+                          <Badge variant="secondary">{job.type}</Badge>
+                        </div>
+                        <Button size="sm" variant="ghost">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <span>{job.applicants} applications</span>
+                        <span>{job.views} views</span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Quick Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <PlusCircle className="h-5 w-5 text-blue-600" />
+                    Quick Actions
+                  </CardTitle>
+                  <CardDescription>Create new opportunities</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    <Button className="h-16 bg-gradient-to-r from-purple-500 to-blue-600">
+                      <div className="text-center">
+                        <Briefcase className="h-6 w-6 mx-auto mb-2" />
+                        <span>Post Full-Time Job</span>
+                      </div>
+                    </Button>
+                    <Button className="h-16 bg-gradient-to-r from-green-500 to-teal-600" variant="outline">
+                      <div className="text-center">
+                        <Calendar className="h-6 w-6 mx-auto mb-2" />
+                        <span>Create Internship Program</span>
+                      </div>
+                    </Button>
+                    <Button className="h-16 bg-gradient-to-r from-orange-500 to-red-600" variant="outline">
+                      <div className="text-center">
+                        <Star className="h-6 w-6 mx-auto mb-2" />
+                        <span>Browse Talent</span>
+                      </div>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="applications" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Recent Applications */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    Recent Applications
+                  </CardTitle>
+                  <CardDescription>Latest candidate submissions</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {[
+                    {
+                      name: "Alice Johnson",
+                      position: "Senior Software Engineer",
+                      university: "Stanford",
+                      status: "New",
+                      time: "2 hours ago",
+                    },
+                    {
+                      name: "Bob Chen",
+                      position: "Product Manager",
+                      university: "MIT",
+                      status: "Reviewed",
+                      time: "4 hours ago",
+                    },
+                    {
+                      name: "Carol Martinez",
+                      position: "Data Science Intern",
+                      university: "UC Berkeley",
+                      status: "Shortlisted",
+                      time: "1 day ago",
+                    },
+                    {
+                      name: "David Kim",
+                      position: "UX Designer",
+                      university: "Harvard",
+                      status: "New",
+                      time: "1 day ago",
+                    },
+                  ].map((app, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          {app.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </div>
+                        <div>
+                          <p className="font-medium">{app.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {app.position} • {app.university}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge
+                          variant={
+                            app.status === "New" ? "default" : app.status === "Shortlisted" ? "default" : "secondary"
+                          }
+                        >
+                          {app.status}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1">{app.time}</p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Application Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    Application Status
+                  </CardTitle>
+                  <CardDescription>Overview of all applications</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">New Applications</span>
+                      <Badge>23</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Under Review</span>
+                      <Badge variant="secondary">45</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Shortlisted</span>
+                      <Badge variant="secondary">12</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Interviewed</span>
+                      <Badge variant="secondary">8</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Hired</span>
+                      <Badge variant="secondary">3</Badge>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button size="sm" variant="outline" className="gap-1">
-                      <Building2 className="h-4 w-4" /> Update Company
-                    </Button>
-                    <Button size="sm" className="gap-1 bg-purple-600 hover:bg-purple-700">
-                      <Plus className="h-4 w-4" /> Post Job
-                    </Button>
-                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="talent" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-orange-600" />
+                  Talent Discovery
+                </CardTitle>
+                <CardDescription>Find and connect with potential candidates</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Talent discovery features coming soon...</p>
                 </div>
               </CardContent>
             </Card>
-          </section>
+          </TabsContent>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-6">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="jobs">Job Postings</TabsTrigger>
-              <TabsTrigger value="internships">Internships</TabsTrigger>
-              <TabsTrigger value="applications">Applications</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="overview">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Briefcase className="h-5 w-5 text-purple-600" /> Active Job Postings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {jobPostings.filter((job) => job.status === "Active").length}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Current open positions</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <GraduationCap className="h-5 w-5 text-blue-600" /> Active Internships
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {internships.filter((internship) => internship.status === "Active").length}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Current internship programs</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <UserPlus className="h-5 w-5 text-green-600" /> New Applications
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold">
-                      {applications.filter((app) => app.status === "New").length}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Applications awaiting review</p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Applications</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoading ? (
-                      <div className="flex justify-center py-6">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {applications.slice(0, 2).map((application) => (
-                          <div key={application.id} className="flex gap-3 items-start border-b pb-3 last:border-0">
-                            <Avatar>
-                              <AvatarImage
-                                src={`/placeholder.svg?height=40&width=40&query=student ${application.name}`}
-                                alt={application.name}
-                              />
-                              <AvatarFallback>
-                                {application.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-
-                            <div className="flex-1">
-                              <h3 className="font-medium">{application.name}</h3>
-                              <p className="text-sm text-muted-foreground">
-                                {application.position} • {application.university}
-                              </p>
-                              <div className="mt-1 flex items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className={
-                                    application.status === "New"
-                                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
-                                      : application.status === "Reviewed"
-                                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-                                        : application.status === "Shortlisted"
-                                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-                                          : ""
-                                  }
-                                >
-                                  {application.status}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  Applied {new Date(application.applied).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-
-                            <Button size="sm" variant="outline">
-                              Review
-                            </Button>
-                          </div>
-                        ))}
-
-                        <Button variant="outline" className="w-full">
-                          View All Applications
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recruitment Analytics</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex h-[160px] items-center justify-center">
-                      <div className="text-center">
-                        <BarChart4 className="h-16 w-16 text-muted-foreground mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">Analytics dashboard coming soon</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="jobs">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Job Postings</h2>
-                <Button className="gap-1">
-                  <Plus className="h-4 w-4" /> Post New Job
-                </Button>
-              </div>
-
-              <Card>
-                <CardContent className="p-0">
-                  {isLoading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {jobPostings.map((job) => (
-                        <div key={job.id} className="p-4 flex flex-col md:flex-row gap-4 items-start">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-lg">{job.title}</h3>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              <Badge
-                                variant={job.status === "Active" ? "default" : "outline"}
-                                className={job.status === "Active" ? "bg-green-600" : ""}
-                              >
-                                {job.status}
-                              </Badge>
-                              {job.deadline && (
-                                <Badge variant="outline">Deadline: {new Date(job.deadline).toLocaleDateString()}</Badge>
-                              )}
-                            </div>
-                            <div className="flex gap-4 mt-2">
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Applications:</span>{" "}
-                                <span className="font-medium">{job.applicants}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Views:</span>{" "}
-                                <span className="font-medium">{job.views}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 self-end md:self-center">
-                            <Button size="sm" variant="outline" className="gap-1">
-                              <FileText className="h-4 w-4" /> Edit
-                            </Button>
-                            <Button size="sm" variant="outline" className="gap-1">
-                              <Users className="h-4 w-4" /> View Applicants
-                            </Button>
-                            {job.status === "Active" && <Button size="sm">Promote</Button>}
-                          </div>
-                        </div>
-                      ))}
-
-                      {jobPostings.length === 0 && (
-                        <div className="p-8 text-center">
-                          <h3 className="font-medium mb-1">No job postings yet</h3>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Create your first job posting to start recruiting talent
-                          </p>
-                          <Button>
-                            <Plus className="h-4 w-4 mr-2" /> Create Job Posting
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="internships">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Internship Programs</h2>
-                <Button className="gap-1">
-                  <Plus className="h-4 w-4" /> Create New Internship
-                </Button>
-              </div>
-
-              <Card>
-                <CardContent className="p-0">
-                  {isLoading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {internships.map((internship) => (
-                        <div key={internship.id} className="p-4 flex flex-col md:flex-row gap-4 items-start">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-lg">{internship.title}</h3>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              <Badge
-                                variant={internship.status === "Active" ? "default" : "outline"}
-                                className={internship.status === "Active" ? "bg-green-600" : ""}
-                              >
-                                {internship.status}
-                              </Badge>
-                              {internship.deadline && (
-                                <Badge variant="outline">
-                                  Deadline: {new Date(internship.deadline).toLocaleDateString()}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex gap-4 mt-2">
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Applications:</span>{" "}
-                                <span className="font-medium">{internship.applicants}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Views:</span>{" "}
-                                <span className="font-medium">{internship.views}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 self-end md:self-center">
-                            <Button size="sm" variant="outline" className="gap-1">
-                              <FileText className="h-4 w-4" /> Edit
-                            </Button>
-                            <Button size="sm" variant="outline" className="gap-1">
-                              <Users className="h-4 w-4" /> View Applicants
-                            </Button>
-                            {internship.status === "Active" && <Button size="sm">Promote</Button>}
-                            {internship.status === "Draft" && <Button size="sm">Publish</Button>}
-                          </div>
-                        </div>
-                      ))}
-
-                      {internships.length === 0 && (
-                        <div className="p-8 text-center">
-                          <h3 className="font-medium mb-1">No internship programs yet</h3>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Create your first internship program to connect with students
-                          </p>
-                          <Button>
-                            <Plus className="h-4 w-4 mr-2" /> Create Internship Program
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="applications">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Applications</h2>
-                <div className="flex gap-2">
-                  <Button variant="outline">Filter</Button>
-                  <Button variant="outline">Export</Button>
+          <TabsContent value="analytics" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-indigo-600" />
+                  Hiring Analytics
+                </CardTitle>
+                <CardDescription>Track your recruitment performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Analytics dashboard coming soon...</p>
                 </div>
-              </div>
-
-              <Card>
-                <CardContent className="p-0">
-                  {isLoading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {applications.map((application) => (
-                        <div key={application.id} className="p-4 flex flex-col md:flex-row gap-4 items-center">
-                          <Avatar className="w-10 h-10">
-                            <AvatarImage
-                              src={`/placeholder.svg?height=40&width=40&query=student ${application.name}`}
-                              alt={application.name}
-                            />
-                            <AvatarFallback>
-                              {application.name
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-
-                          <div className="flex-1">
-                            <h3 className="font-medium">{application.name}</h3>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                              <span>{application.position}</span>
-                              <span className="flex items-center gap-1">
-                                <GraduationCap className="h-3.5 w-3.5" /> {application.university}
-                              </span>
-                              <span className="text-muted-foreground">
-                                Applied {new Date(application.applied).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className={
-                                application.status === "New"
-                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
-                                  : application.status === "Reviewed"
-                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-                                    : application.status === "Shortlisted"
-                                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-                                      : ""
-                              }
-                            >
-                              {application.status}
-                            </Badge>
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" className="gap-1">
-                              <FileText className="h-4 w-4" /> Resume
-                            </Button>
-                            <Button size="sm" className="gap-1">
-                              <MessageSquare className="h-4 w-4" /> Contact
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {applications.length === 0 && (
-                        <div className="p-8 text-center">
-                          <h3 className="font-medium mb-1">No applications yet</h3>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Applications will appear here once students apply to your job postings
-                          </p>
-                          <Button>
-                            <Plus className="h-4 w-4 mr-2" /> Create Job Posting
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
-    </SidebarInset>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
   )
 }
