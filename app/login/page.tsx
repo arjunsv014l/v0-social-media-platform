@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Building2 } from "lucide-react" // Removed Briefcase
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Building2, SchoolIcon } from "lucide-react" // Added SchoolIcon for University
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
@@ -24,10 +24,8 @@ export default function LoginPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // If user is already logged in and auth check is complete, AuthContext should handle redirection.
-    // This effect is more of a safeguard or for specific logic if needed here.
     if (!authLoading && authChecked && user) {
-      // console.log("Login page: User already logged in, AuthContext will redirect.");
+      // AuthContext handles redirection
     }
   }, [user, authLoading, authChecked, router])
 
@@ -41,7 +39,7 @@ export default function LoginPage() {
         title: "Welcome back! 🎉",
         description: "You've successfully logged in. Redirecting...",
       })
-      // Redirection is primarily handled by AuthContext based on user type
+      // Redirection is primarily handled by AuthContext
     } catch (error: any) {
       toast({
         title: "Error",
@@ -84,12 +82,16 @@ export default function LoginPage() {
 
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               {" "}
-              {/* Changed to grid-cols-2 */}
+              {/* Changed to grid-cols-3 */}
               <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
                 <GraduationCap className="h-3 w-3" />
                 Student
+              </TabsTrigger>
+              <TabsTrigger value="university" className="flex items-center gap-1 text-xs">
+                <SchoolIcon className="h-3 w-3" /> {/* University Icon */}
+                University
               </TabsTrigger>
               <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
                 <Building2 className="h-3 w-3" />
@@ -105,7 +107,14 @@ export default function LoginPage() {
                 "Access your campus network",
               )}
             </TabsContent>
-
+            <TabsContent value="university">
+              {getTabContent(
+                "university",
+                <SchoolIcon className="h-6 w-6 text-white" />,
+                "University Login",
+                "Access your institution's portal",
+              )}
+            </TabsContent>
             <TabsContent value="corporate">
               {getTabContent(
                 "corporate",
