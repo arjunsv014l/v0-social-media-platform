@@ -20,7 +20,7 @@ export default function UniversitySignupForm() {
     lastName: "",
     email: "",
     password: "",
-    jobTitle: "", // e.g., Dean, Administrator, HOD
+    jobTitle: "",
     affiliatedCollege: "",
   })
   const { signUp } = useAuth()
@@ -31,7 +31,7 @@ export default function UniversitySignupForm() {
     if (!formData.affiliatedCollege) {
       toast({
         title: "Missing Information",
-        description: "Please select the affiliated college.",
+        description: "Please select your affiliated college.",
         variant: "destructive",
       })
       return
@@ -41,16 +41,15 @@ export default function UniversitySignupForm() {
     const universityData = {
       ...formData,
       userType: "university",
-      role: `University Admin - ${formData.affiliatedCollege}`, // Example role for university user
     }
 
     try {
       await signUp(formData.email, formData.password, universityData, "university")
       toast({
-        title: "Welcome to CampusConnect! 🏫",
-        description: "Your university account has been created successfully. Redirecting...",
+        title: "University Account Created! 🏫",
+        description: "Your university account has been set up. Redirecting...",
       })
-      // Redirection will be handled by AuthContext
+      // Redirection handled by AuthContext
     } catch (error: any) {
       toast({
         title: "Error",
@@ -103,12 +102,12 @@ export default function UniversitySignupForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="jobTitle-uni">Job Title / Role *</Label>
+        <Label htmlFor="jobTitle-uni">Job Title / Department *</Label>
         <Input
           id="jobTitle-uni"
           value={formData.jobTitle}
           onChange={(e) => setFormData((prev) => ({ ...prev, jobTitle: e.target.value }))}
-          placeholder="e.g., Dean, HOD, Administrator"
+          placeholder="e.g., Admissions Head, CSE Department"
           required
           disabled={loading}
         />
@@ -162,14 +161,14 @@ export default function UniversitySignupForm() {
 
       <Button
         type="submit"
-        className="w-full bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
+        className="w-full bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700"
         disabled={loading}
         size="lg"
       >
         {loading ? (
           <>
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Creating Account...
+            Creating University Account...
           </>
         ) : (
           "Create University Account"

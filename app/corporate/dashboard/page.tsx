@@ -5,10 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import {
-  Building2,
-  Users,
-  Briefcase,
+  BuildingIcon,
+  UsersIcon,
+  BriefcaseIcon,
+  ShieldAlertIcon,
+  Loader2,
   TrendingUp,
   FileText,
   Calendar,
@@ -26,8 +29,8 @@ interface DashboardStats {
   candidates: number
 }
 
-export default function CorporateDashboard() {
-  const { user, profile } = useAuth()
+export default function CorporateDashboardPage() {
+  const { user, profile, loading: authLoading, authChecked } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     activeJobs: 0,
     applications: 0,
@@ -45,37 +48,98 @@ export default function CorporateDashboard() {
     })
   }, [])
 
+  if (authLoading || !authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!user || !profile) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <ShieldAlertIcon className="h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
+        <p className="text-muted-foreground">You must be logged in to view this page.</p>
+      </div>
+    )
+  }
+
+  if (profile.user_type !== "corporate") {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <ShieldAlertIcon className="h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
+        <p className="text-muted-foreground">This dashboard is for corporate partners only.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="container mx-auto p-6 space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              Corporate Dashboard
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Welcome back to {profile?.company_name || "Your Company"}! Find the best talent.
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Button className="bg-gradient-to-r from-purple-500 to-blue-600">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Post New Job
-            </Button>
-            <Button variant="outline">
-              <Building2 className="h-4 w-4 mr-2" />
-              Company Profile
-            </Button>
-          </div>
+    <SidebarInset>
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="md:hidden" />
+          <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-sky-600 bg-clip-text text-transparent">
+            {profile.company_name || "Corporate"} Dashboard
+          </h1>
         </div>
+        {/* Add any header actions for corporate users if needed */}
+      </header>
+      <main className="flex-1 p-4 md:p-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <BuildingIcon className="mr-2 h-6 w-6 text-indigo-500" />
+              Welcome, {profile.company_name || "Valued Partner"}!
+            </CardTitle>
+            <CardDescription>
+              Manage your company&apos;s presence, job postings, and engagement on CampusConnect.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Job Postings</CardTitle>
+                <BriefcaseIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.activeJobs}</div>
+                <p className="text-xs text-muted-foreground">Active job postings</p>
+                {/* Link to manage job postings */}
+              </CardContent>
+            </Card>
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Applicants</CardTitle>
+                <UsersIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.applications}</div>
+                <p className="text-xs text-muted-foreground">Total applicants</p>
+                {/* Link to view applicants */}
+              </CardContent>
+            </Card>
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Company Profile</CardTitle>
+                <BuildingIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">Update your company details and branding.</p>
+                {/* Link to edit company profile */}
+              </CardContent>
+            </Card>
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-l-4 border-l-purple-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Job Posts</CardTitle>
-              <Briefcase className="h-4 w-4 text-purple-600" />
+              <BriefcaseIcon className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">{stats.activeJobs}</div>
@@ -108,7 +172,7 @@ export default function CorporateDashboard() {
           <Card className="border-l-4 border-l-orange-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Candidate Pool</CardTitle>
-              <Users className="h-4 w-4 text-orange-600" />
+              <UsersIcon className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">{stats.candidates}</div>
@@ -132,7 +196,7 @@ export default function CorporateDashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="h-5 w-5 text-purple-600" />
+                    <BriefcaseIcon className="h-5 w-5 text-purple-600" />
                     Active Job Postings
                   </CardTitle>
                   <CardDescription>Currently open positions</CardDescription>
@@ -176,7 +240,7 @@ export default function CorporateDashboard() {
                   <div className="grid grid-cols-1 gap-3">
                     <Button className="h-16 bg-gradient-to-r from-purple-500 to-blue-600">
                       <div className="text-center">
-                        <Briefcase className="h-6 w-6 mx-auto mb-2" />
+                        <BriefcaseIcon className="h-6 w-6 mx-auto mb-2" />
                         <span>Post Full-Time Job</span>
                       </div>
                     </Button>
@@ -311,14 +375,14 @@ export default function CorporateDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-orange-600" />
+                  <UsersIcon className="h-5 w-5 text-orange-600" />
                   Talent Discovery
                 </CardTitle>
                 <CardDescription>Find and connect with potential candidates</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-8">
-                  <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">Talent discovery features coming soon...</p>
                 </div>
               </CardContent>
@@ -343,7 +407,7 @@ export default function CorporateDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+      </main>
+    </SidebarInset>
   )
 }
