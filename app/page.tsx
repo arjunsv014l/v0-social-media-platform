@@ -1,12 +1,88 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { BellIcon, MessageSquareIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { BellIcon, MessageSquareIcon, PlusIcon, SearchIcon, Loader2 } from "lucide-react"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import NewPostCard from "@/components/new-post-card"
 import PostCard from "@/components/post-card"
 import TrendingSidebar from "@/components/trending-sidebar"
+import { useAuth } from "@/contexts/auth-context"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase/client"
+import type { PostWithAuthor } from "@/lib/supabase/types"
+
+import { CreatePostDialog } from "@/components/create-post-dialog"
+import { SearchDialog } from "@/components/search-dialog"
+import { NotificationsPopover } from "@/components/notifications-popover" // Updated import
 
 export default function Home() {
+  const { user, profile, loading: authLoading } = useAuth() // Added profile here
+  const [posts, setPosts] = useState<PostWithAuthor[]>([])
+  const [loadingPosts, setLoadingPosts] = useState(true)
+
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false) // State for popover
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      setLoadingPosts(true)
+      const { data, error } = await supabase
+        .from("posts")
+        .select(
+          `
+          *,
+          author:profiles!user_id(*)
+        `,
+        )
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      if (error) {
+        console.error("Error fetching posts:", error)
+        setPosts([])
+      } else {
+        setPosts((data as PostWithAuthor[]) || [])
+      }
+      setLoadingPosts(false)
+    }
+
+    fetchPosts()
+
+    const postChannel = supabase
+      .channel("realtime-posts-home")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        const fetchNewPost = async () => {
+          const { data: newPostData, error: newPostError } = await supabase
+            .from("posts")
+            .select(`*, author:profiles!user_id(*)`)
+            .eq("id", payload.new.id)
+            .single()
+          if (newPostError) {
+            console.error("Error fetching new post:", newPostError)
+          } else if (newPostData) {
+            setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
+          }
+        }
+        fetchNewPost()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(postChannel)
+    }
+  }, [])
+
+  if (authLoading && !user) {
+    // Show loader only if auth is loading AND user is not yet available
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    )
+  }
+
   return (
     <SidebarInset>
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
@@ -23,51 +99,72 @@ export default function Home() {
           <input
             type="search"
             placeholder="Search posts, people, events..."
-            className="h-9 w-64 rounded-full border border-input bg-background pl-8 pr-4 text-sm"
+            className="h-9 w-64 rounded-full border border-input bg-background pl-8 pr-4 text-sm focus:outline-none"
+            onFocus={() => setIsSearchOpen(true)}
+            readOnly
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost">
-            <SearchIcon className="h-5 w-5 md:hidden" />
+          <Button size="icon" variant="ghost" onClick={() => setIsSearchOpen(true)} className="md:hidden">
+            <SearchIcon className="h-5 w-5" />
             <span className="sr-only">Search</span>
           </Button>
-          <Button size="icon" variant="ghost" className="relative">
-            <BellIcon className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-xs text-white flex items-center justify-center">
-              3
-            </span>
-            <span className="sr-only">Notifications</span>
-          </Button>
-          <Link href="/messages">
-            <Button size="icon" variant="ghost" className="relative">
-              <MessageSquareIcon className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-500 text-xs text-white flex items-center justify-center">
-                2
-              </span>
-              <span className="sr-only">Messages</span>
+
+          {user && ( // Only show notifications if user is logged in
+            <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="relative"
+                // onClick is handled by PopoverTrigger now
+              >
+                <BellIcon className="h-5 w-5" />
+                {/* Badge count can be fetched here or from a context if needed globally in header */}
+                <span className="sr-only">Notifications</span>
+              </Button>
+            </NotificationsPopover>
+          )}
+
+          {user && ( // Only show messages link if user is logged in
+            <Link href="/messages">
+              <Button size="icon" variant="ghost" className="relative">
+                <MessageSquareIcon className="h-5 w-5" />
+                <span className="sr-only">Messages</span>
+              </Button>
+            </Link>
+          )}
+
+          {user && ( // Only show create post button if user is logged in
+            <Button
+              size="icon"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
+              onClick={() => setIsCreatePostOpen(true)}
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span className="sr-only">New post</span>
             </Button>
-          </Link>
-          <Button size="icon" className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden">
-            <PlusIcon className="h-5 w-5" />
-            <span className="sr-only">New post</span>
-          </Button>
+          )}
+
           <div className="flex items-center gap-2">
-            <Link href="/login">
-              <Button variant="outline" size="sm" className="hidden md:flex">
-                Login
-              </Button>
-            </Link>
-            <Link href="/profile">
-              <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full">
-                <img
-                  src="/placeholder.svg?height=36&width=36&query=student profile"
-                  alt="Profile"
-                  className="h-9 w-9 rounded-full object-cover"
-                />
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
-                <span className="sr-only">Profile</span>
-              </Button>
-            </Link>
+            {user && profile ? ( // Check for profile as well
+              <Link href="/profile">
+                <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <img
+                    src={profile.avatar_url || "/placeholder.svg?height=36&width=36&query=student profile"}
+                    alt={profile.full_name || "Profile"}
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
+                  <span className="sr-only">Profile</span>
+                </Button>
+              </Link>
+            ) : !user && !authLoading ? ( // Show login only if not loading and no user
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="hidden md:flex">
+                  Login
+                </Button>
+              </Link>
+            ) : null}
           </div>
         </div>
       </header>
@@ -75,47 +172,31 @@ export default function Home() {
       <main className="flex-1 p-4">
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            <NewPostCard />
-            <div className="space-y-4">
-              <PostCard
-                avatar="/placeholder.svg?height=40&width=40&query=student profile 1"
-                name="Emma Johnson"
-                handle="@emma_j"
-                timestamp="2h ago"
-                content="Just aced my final exam! 🎉 All those late night study sessions finally paid off. Anyone want to celebrate this weekend?"
-                image="/placeholder.svg?height=400&width=600&query=students celebrating"
-                likes="142"
-                comments="28"
-                shares="5"
-              />
-              <PostCard
-                avatar="/placeholder.svg?height=40&width=40&query=student profile 2"
-                name="Alex Chen"
-                handle="@alexc"
-                timestamp="4h ago"
-                content="Looking for teammates for the upcoming hackathon next month. Need 2 more people who are into AI and backend development. DM if interested!"
-                likes="56"
-                comments="43"
-                shares="12"
-              />
-              <PostCard
-                avatar="/placeholder.svg?height=40&width=40&query=student profile 3"
-                name="Sarah Williams"
-                handle="@sarahw"
-                timestamp="Yesterday"
-                content="The library now has extended hours during finals week. Open 24/7 starting Monday! #StudyTime #FinalsWeek"
-                image="/placeholder.svg?height=400&width=600&query=university library"
-                likes="89"
-                comments="17"
-                shares="32"
-              />
-            </div>
+            {user && <NewPostCard />}
+            {loadingPosts ? (
+              <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : posts.length > 0 ? (
+              <div className="space-y-4">
+                {posts.map((post) => (
+                  <PostCard key={post.id} post={post} author={post.author} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No posts yet. Be the first to share something or follow others!
+              </div>
+            )}
           </div>
           <div className="hidden lg:block">
             <TrendingSidebar />
           </div>
         </div>
       </main>
+      <CreatePostDialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
+      <SearchDialog open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+      {/* NotificationsPopover is now triggered by its child button in the header */}
     </SidebarInset>
   )
 }
