@@ -33,12 +33,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
-    const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
-    if (error && error.code !== "PGRST116") {
-      console.error("Error fetching profile:", error)
+    try {
+      const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
+      if (error && error.code !== "PGRST116") {
+        console.error("Error fetching profile:", error)
+        return null
+      }
+      return profileData as Profile | null
+    } catch (error) {
+      console.error("Error in fetchProfile:", error)
       return null
     }
-    return profileData as Profile | null
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -52,21 +57,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchUserAndProfile = async () => {
-      setLoading(true)
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const activeUser = session?.user ?? null
-      setUser(activeUser)
+      try {
+        setLoading(true)
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-      if (activeUser) {
-        const userProfile = await fetchProfile(activeUser.id)
-        setProfile(userProfile)
-      } else {
-        setProfile(null)
+        const activeUser = session?.user ?? null
+        setUser(activeUser)
+
+        if (activeUser) {
+          const userProfile = await fetchProfile(activeUser.id)
+          setProfile(userProfile)
+        } else {
+          setProfile(null)
+        }
+      } catch (error) {
+        console.error("Error fetching user and profile:", error)
+      } finally {
+        setLoading(false)
+        setAuthChecked(true)
       }
-      setLoading(false)
-      setAuthChecked(true)
     }
 
     fetchUserAndProfile()
@@ -74,17 +85,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setLoading(true)
-      const activeUser = session?.user ?? null
-      setUser(activeUser)
-      if (activeUser) {
-        const userProfile = await fetchProfile(activeUser.id)
-        setProfile(userProfile)
-      } else {
-        setProfile(null)
+      try {
+        setLoading(true)
+        const activeUser = session?.user ?? null
+        setUser(activeUser)
+
+        if (activeUser) {
+          const userProfile = await fetchProfile(activeUser.id)
+          setProfile(userProfile)
+        } else {
+          setProfile(null)
+        }
+      } catch (error) {
+        console.error("Error in auth state change:", error)
+      } finally {
+        setLoading(false)
+        setAuthChecked(true)
       }
-      setLoading(false)
-      setAuthChecked(true)
     })
 
     return () => subscription.unsubscribe()
@@ -92,57 +109,95 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Effect for handling redirection based on profile completion
   useEffect(() => {
-    if (!loading && authChecked && user && profile) {
-      // If profile is not complete and user is not on public paths or profile completion path
-      if (!profile.is_profile_complete && !publicPaths.includes(pathname) && pathname !== profileCompletionPath) {
-        router.push(profileCompletionPath)
-      }
-      // If profile is complete and user is on profile completion path, redirect to dashboard
-      else if (profile.is_profile_complete && pathname === profileCompletionPath) {
-        router.push("/")
-      }
+    // Only proceed if we're not loading and auth has been checked
+    if (loading || !authChecked) return
+
+    // If user is not authenticated, don't redirect
+    if (!user) return
+
+    // If we don't have profile data yet, wait for it
+    if (!profile) return
+
+    console.log("Auth redirect check:", {
+      user: !!user,
+      profile: !!profile,
+      isProfileComplete: profile?.is_profile_complete,
+      currentPath: pathname,
+    })
+
+    // If profile is not complete and user is not on public paths or profile completion path
+    if (!profile.is_profile_complete && !publicPaths.includes(pathname) && pathname !== profileCompletionPath) {
+      console.log("Redirecting to profile completion")
+      router.push(profileCompletionPath)
+    }
+    // If profile is complete and user is on profile completion path, redirect to dashboard
+    else if (profile.is_profile_complete && pathname === profileCompletionPath) {
+      console.log("Redirecting to dashboard")
+      router.push("/")
+    }
+    // If profile is complete and user is on login/signup, redirect to dashboard
+    else if (profile.is_profile_complete && publicPaths.includes(pathname)) {
+      console.log("Redirecting authenticated user to dashboard")
+      router.push("/")
     }
   }, [user, profile, loading, authChecked, pathname, router])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    // Redirection will be handled by the useEffect above after profile is fetched
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+
+      // Don't manually redirect here - let the useEffect handle it after profile is fetched
+      console.log("Sign in successful, waiting for profile fetch and redirect")
+    } catch (error) {
+      console.error("Sign in error:", error)
+      throw error
+    }
   }
 
   const signUp = async (email: string, password: string, userData: any) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          username: email.split("@")[0],
-          full_name: `${userData.firstName} ${userData.lastName}`,
-          major: userData.major,
-          graduationYear: userData.graduationYear,
-          university: userData.university,
-          is_profile_complete: false, // Explicitly set to false on signup
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            username: email.split("@")[0],
+            full_name: `${userData.firstName} ${userData.lastName}`,
+            major: userData.major,
+            graduationYear: userData.graduationYear,
+            university: userData.university,
+            is_profile_complete: false,
+          },
         },
-      },
-    })
+      })
 
-    if (error) {
+      if (error) {
+        console.error("Sign up error:", error)
+        throw error
+      }
+
+      console.log("Sign up successful, waiting for profile creation and redirect")
+    } catch (error) {
       console.error("Sign up error:", error)
       throw error
     }
-    // The trigger 'handle_new_user' in Supabase will create the profile.
-    // The onAuthStateChange listener will fetch it and redirect to profile completion.
   }
 
   const signOut = async () => {
-    setLoading(true)
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    setLoading(false)
-    router.push("/login")
+    try {
+      setLoading(true)
+      await supabase.auth.signOut()
+      setUser(null)
+      setProfile(null)
+      router.push("/login")
+    } catch (error) {
+      console.error("Sign out error:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
