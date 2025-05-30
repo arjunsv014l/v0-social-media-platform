@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server"
 export async function middleware(req: NextRequest) {
   // In next-lite, middleware for auth redirection is not fully supported.
   // Client-side routing protection in AuthContext will handle this.
+  // This middleware should essentially be a pass-through.
   return NextResponse.next()
 }
 
