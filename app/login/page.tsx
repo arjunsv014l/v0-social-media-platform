@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
+import type { Profile } from "@/types"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -26,7 +27,8 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await signIn(email, password)
+      const userTypeForLogin = activeTab as Profile["user_type"]
+      await signIn(email, password, userTypeForLogin)
       toast({
         title: "Welcome back! 🎉",
         description: "You've successfully logged in.",
@@ -70,9 +72,9 @@ export default function LoginPage() {
                 <GraduationCap className="h-3 w-3" />
                 Student
               </TabsTrigger>
-              <TabsTrigger value="professional" className="flex items-center gap-1 text-xs">
+              <TabsTrigger value="university" className="flex items-center gap-1 text-xs">
                 <Briefcase className="h-3 w-3" />
-                Professional
+                University
               </TabsTrigger>
               <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
                 <Building2 className="h-3 w-3" />
@@ -89,12 +91,12 @@ export default function LoginPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="professional">
+            <TabsContent value="university">
               {getTabContent(
-                "professional",
+                "university",
                 <Briefcase className="h-6 w-6 text-white" />,
-                "Professional Login",
-                "Connect and mentor students",
+                "University Login",
+                "Access university administration tools",
               )}
             </TabsContent>
 

@@ -5,23 +5,23 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
+import type { Profile } from "@/lib/supabase/types"
 
-export default function CorporateSignupForm() {
+const COLLEGES = ["SIMATS", "VIT", "SRM"] as const
+
+export default function UniversitySignupForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [fullName, setFullName] = useState("")
-  const [companyName, setCompanyName] = useState("")
-  const [companyWebsite, setCompanyWebsite] = useState("")
+  const [collegeName, setCollegeName] = useState<Profile["college_name"]>()
   const [jobTitle, setJobTitle] = useState("")
-  const [industry, setIndustry] = useState("")
-  const [companyDescription, setCompanyDescription] = useState("")
 
   const [loading, setLoading] = useState(false)
   const { signUp } = useAuth()
@@ -33,7 +33,7 @@ export default function CorporateSignupForm() {
       toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" })
       return
     }
-    if (!companyName || !fullName || !jobTitle) {
+    if (!collegeName || !jobTitle || !fullName) {
       toast({ title: "Error", description: "Please fill all required fields.", variant: "destructive" })
       return
     }
@@ -43,17 +43,14 @@ export default function CorporateSignupForm() {
       await signUp({
         email,
         password,
-        user_type: "corporate",
+        user_type: "university",
         full_name: fullName,
-        company_name: companyName,
-        company_website: companyWebsite || undefined,
+        college_name: collegeName,
         job_title: jobTitle,
-        industry: industry || undefined,
-        company_description: companyDescription || undefined,
       })
       toast({
         title: "Account Created! 🎉",
-        description: "Welcome! Your corporate account is ready. You will be redirected shortly.",
+        description: "Welcome! Your university account is ready. You will be redirected shortly.",
       })
       // Redirection will be handled by AuthContext
     } catch (error: any) {
@@ -71,9 +68,9 @@ export default function CorporateSignupForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="fullName-corp">Your Full Name</Label>
+          <Label htmlFor="fullName-uni">Full Name (Admin/Staff)</Label>
           <Input
-            id="fullName-corp"
+            id="fullName-uni"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
@@ -81,9 +78,9 @@ export default function CorporateSignupForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="email-corp">Work Email</Label>
+          <Label htmlFor="email-uni">Official Email</Label>
           <Input
-            id="email-corp"
+            id="email-uni"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -95,10 +92,10 @@ export default function CorporateSignupForm() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="password-corp">Password</Label>
+          <Label htmlFor="password-uni">Password</Label>
           <div className="relative">
             <Input
-              id="password-corp"
+              id="password-uni"
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -118,10 +115,10 @@ export default function CorporateSignupForm() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword-corp">Confirm Password</Label>
+          <Label htmlFor="confirmPassword-uni">Confirm Password</Label>
           <div className="relative">
             <Input
-              id="confirmPassword-corp"
+              id="confirmPassword-uni"
               type={showConfirmPassword ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -144,19 +141,28 @@ export default function CorporateSignupForm() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="companyName-corp">Company Name</Label>
-          <Input
-            id="companyName-corp"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            required
+          <Label htmlFor="collegeName-uni">University/College</Label>
+          <Select
+            value={collegeName}
+            onValueChange={(value) => setCollegeName(value as Profile["college_name"])}
             disabled={loading}
-          />
+          >
+            <SelectTrigger id="collegeName-uni">
+              <SelectValue placeholder="Select Institution" />
+            </SelectTrigger>
+            <SelectContent>
+              {COLLEGES.map((college) => (
+                <SelectItem key={college} value={college}>
+                  {college}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="jobTitle-corp">Your Job Title</Label>
+          <Label htmlFor="jobTitle-uni">Your Job Title (e.g., Dean, Admin Staff)</Label>
           <Input
-            id="jobTitle-corp"
+            id="jobTitle-uni"
             value={jobTitle}
             onChange={(e) => setJobTitle(e.target.value)}
             required
@@ -165,37 +171,9 @@ export default function CorporateSignupForm() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="companyWebsite-corp">Company Website (Optional)</Label>
-          <Input
-            id="companyWebsite-corp"
-            type="url"
-            value={companyWebsite}
-            onChange={(e) => setCompanyWebsite(e.target.value)}
-            disabled={loading}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="industry-corp">Industry (Optional)</Label>
-          <Input id="industry-corp" value={industry} onChange={(e) => setIndustry(e.target.value)} disabled={loading} />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="companyDescription-corp">Company Description (Optional)</Label>
-        <Textarea
-          id="companyDescription-corp"
-          value={companyDescription}
-          onChange={(e) => setCompanyDescription(e.target.value)}
-          disabled={loading}
-          rows={3}
-        />
-      </div>
-
       <Button
         type="submit"
-        className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
+        className="w-full bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700"
         disabled={loading}
       >
         {loading ? (
@@ -203,7 +181,7 @@ export default function CorporateSignupForm() {
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing Up...
           </>
         ) : (
-          "Sign Up as Corporate User"
+          "Sign Up as University Staff"
         )}
       </Button>
     </form>
