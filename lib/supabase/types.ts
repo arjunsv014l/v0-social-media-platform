@@ -1,37 +1,34 @@
+// ... other types ...
+
 export interface Profile {
-  id: string // Corresponds to auth.users.id
+  id: string // UUID from auth.users
   updated_at?: string
+  created_at?: string
   username?: string
   full_name?: string
   avatar_url?: string
   website?: string
-  user_type?: "student" | "professional" | "corporate"
-  is_profile_complete?: boolean // Essential for redirection logic
+  user_type?: "student" | "professional" | "corporate" | "university" // Added university
+  is_profile_complete?: boolean
 
-  // Student specific
+  // Student specific (can be null for other types)
   university?: string
   major?: string
-  graduation_year?: string // Ensure consistent naming (e.g., snake_case for DB)
+  graduation_year?: string
   student_id_number?: string
-  contact_phone?: string // New field for student contact
+  contact_phone?: string // Ensure this line is present
 
   // Professional specific
-  job_title?: string // Can also be for corporate user's own title
-  company?: string // Company professional works for
-  industry?: string // Also for corporate company
-  years_experience?: string // Or number
-  linkedin_url?: string // Professional's or Corporate user's LinkedIn
-  skills?: string[] // Stored as text[] in Supabase
-  bio?: string
+  company?: string
+  job_title?: string
+  industry?: string
+  linkedin_profile?: string
 
-  // Corporate specific (for the company the user represents)
-  company_name?: string // Name of the company being represented
-  company_size?: string
-  // industry is shared with professional, but context is company's industry
-  company_website?: string
-  headquarters?: string // Company's HQ
-  // linkedin_url (can be company's LinkedIn page)
-  // job_title (user's title within this company)
-  company_description?: string
-  founded_year?: string
+  // Corporate/University specific
+  organization_name?: string
+  organization_type?: "corporate" | "university" // To distinguish between the two if needed
+  contact_email?: string // Official contact email for the org
+  // Add other relevant fields for corporate/university users
 }
+
+// ... other types ...
