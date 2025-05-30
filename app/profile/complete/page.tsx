@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image" // For displaying the avatar
+import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase/client"
 import type { Profile } from "@/lib/supabase/types"
 import { useToast } from "@/components/ui/use-toast"
 
-// Mock data for dropdowns - replace with actual data fetching or keep as is for simplicity
+// Mock data for dropdowns
 const universities = ["SIMATS", "VIT", "SRM", "Stanford University", "MIT", "Harvard University", "Other"]
 const majors = [
   "Computer Science",
@@ -37,11 +37,11 @@ type StudentProfileFormData = Pick<
   | "graduation_year"
   | "student_id_number"
   | "contact_phone"
-  | "website"
-  | "avatar_url" // This will store the public URL from Supabase Storage
+  // | "website" // Removed website
+  | "avatar_url"
 >
 
-const AVATAR_BUCKET = "avatars" // Your Supabase storage bucket name
+const AVATAR_BUCKET = "avatars"
 
 export default function CompleteStudentProfilePage() {
   const { user, profile, refreshProfile, loading: authLoading } = useAuth()
@@ -57,7 +57,7 @@ export default function CompleteStudentProfilePage() {
     graduation_year: "",
     student_id_number: "",
     contact_phone: "",
-    website: "",
+    // website: "", // Removed website
     avatar_url: "",
   })
   const [pageLoading, setPageLoading] = useState(true)
@@ -89,11 +89,11 @@ export default function CompleteStudentProfilePage() {
             graduation_year: profile.graduation_year || "",
             student_id_number: profile.student_id_number || "",
             contact_phone: profile.contact_phone || "",
-            website: profile.website || "",
-            avatar_url: profile.avatar_url || "", // Existing avatar URL
+            // website: profile.website || "", // Removed website
+            avatar_url: profile.avatar_url || "",
           })
           if (profile.avatar_url) {
-            setAvatarPreview(profile.avatar_url) // Show existing avatar
+            setAvatarPreview(profile.avatar_url)
           }
         }
         setPageLoading(false)
@@ -112,7 +112,6 @@ export default function CompleteStudentProfilePage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      // Basic client-side validation (type and size)
       const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
       if (!allowedTypes.includes(file.type)) {
         toast({
@@ -142,13 +141,13 @@ export default function CompleteStudentProfilePage() {
 
     setIsUploadingAvatar(true)
     const fileExt = avatarFile.name.split(".").pop()
-    const fileName = `${Date.now()}.${fileExt}` // Unique file name
-    const filePath = `${user.id}/${fileName}` // Path like: user_id/timestamp.ext
+    const fileName = `${Date.now()}.${fileExt}`
+    const filePath = `${user.id}/${fileName}`
 
     try {
       const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(filePath, avatarFile, {
         cacheControl: "3600",
-        upsert: false, // Set to true if you want to overwrite if a file with the same path exists
+        upsert: false,
       })
 
       if (uploadError) {
@@ -178,9 +177,9 @@ export default function CompleteStudentProfilePage() {
 
   const removeAvatarPreview = () => {
     setAvatarFile(null)
-    setAvatarPreview(formData.avatar_url || null) // Revert to original avatar_url from profile if exists
+    setAvatarPreview(formData.avatar_url || null)
     if (fileInputRef.current) {
-      fileInputRef.current.value = "" // Reset file input
+      fileInputRef.current.value = ""
     }
   }
 
@@ -204,31 +203,28 @@ export default function CompleteStudentProfilePage() {
     }
 
     setFormSubmitting(true)
-    let uploadedAvatarUrl = formData.avatar_url // Keep existing if no new file
+    let uploadedAvatarUrl = formData.avatar_url
 
     if (avatarFile) {
-      // If a new file was selected and previewed
       const newUrl = await handleAvatarUpload()
       if (newUrl) {
         uploadedAvatarUrl = newUrl
       } else {
-        // Avatar upload failed, but profile data might still be savable
-        // Or, decide to halt profile save if avatar is critical
         toast({
           title: "Avatar Issue",
           description: "Avatar upload failed. Profile saved without new avatar.",
           variant: "warning",
         })
-        // If avatar upload must succeed to save profile, uncomment below and return:
-        // setFormSubmitting(false);
-        // return;
       }
     }
 
     try {
+      // Ensure 'website' is not included in the updates object
+      const { website, ...dataToUpdate } = formData // Destructure to remove website if it somehow still exists in formData
+
       const updates: Partial<Profile> = {
-        ...formData,
-        avatar_url: uploadedAvatarUrl, // Use the potentially new URL
+        ...dataToUpdate, // Use the formData without website
+        avatar_url: uploadedAvatarUrl,
         is_profile_complete: true,
         updated_at: new Date().toISOString(),
       }
@@ -311,20 +307,19 @@ export default function CompleteStudentProfilePage() {
                     <UploadCloud className="mr-2 h-4 w-4" />
                     {avatarFile ? "Change Picture" : "Upload Picture"}
                   </Button>
-                  {avatarPreview &&
-                    avatarFile && ( // Show remove only if a new file is staged
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={removeAvatarPreview}
-                        disabled={isUploadingAvatar || formSubmitting}
-                        className="text-xs text-red-500 hover:text-red-600"
-                      >
-                        <XCircle className="mr-1 h-3 w-3" />
-                        Remove Selected
-                      </Button>
-                    )}
+                  {avatarPreview && avatarFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeAvatarPreview}
+                      disabled={isUploadingAvatar || formSubmitting}
+                      className="text-xs text-red-500 hover:text-red-600"
+                    >
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Remove Selected
+                    </Button>
+                  )}
                 </div>
 
                 <Input
@@ -345,7 +340,7 @@ export default function CompleteStudentProfilePage() {
               )}
             </div>
 
-            {/* Other form fields remain the same */}
+            {/* Full Name and Username */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="full_name">Full Name *</Label>
@@ -373,6 +368,7 @@ export default function CompleteStudentProfilePage() {
               </div>
             </div>
 
+            {/* University and Major */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="university">University *</Label>
@@ -418,6 +414,7 @@ export default function CompleteStudentProfilePage() {
               </div>
             </div>
 
+            {/* Graduation Year and Student ID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="graduation_year">Graduation Year *</Label>
@@ -453,6 +450,7 @@ export default function CompleteStudentProfilePage() {
               </div>
             </div>
 
+            {/* Contact Phone - Website field is removed */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="contact_phone">Contact Phone (Optional)</Label>
@@ -466,20 +464,8 @@ export default function CompleteStudentProfilePage() {
                   disabled={formSubmitting || isUploadingAvatar}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="website">Website (Optional)</Label>
-                <Input
-                  id="website"
-                  name="website"
-                  type="url"
-                  value={formData.website || ""}
-                  onChange={handleChange}
-                  placeholder="e.g., https://yourportfolio.com"
-                  disabled={formSubmitting || isUploadingAvatar}
-                />
-              </div>
+              {/* The website input field was here and has been removed */}
             </div>
-            {/* Removed avatar_url text input */}
 
             <Button type="submit" className="w-full" disabled={formSubmitting || isUploadingAvatar}>
               {formSubmitting ? (

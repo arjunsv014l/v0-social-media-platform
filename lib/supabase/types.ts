@@ -7,8 +7,8 @@ export interface Profile {
   username?: string
   full_name?: string
   avatar_url?: string
-  website?: string
-  user_type?: "student" | "professional" | "corporate" | "university" // Added university
+  // website?: string // This line is now removed
+  user_type?: "student" | "professional" | "corporate" | "university"
   is_profile_complete?: boolean
 
   // Student specific (can be null for other types)
@@ -16,7 +16,7 @@ export interface Profile {
   major?: string
   graduation_year?: string
   student_id_number?: string
-  contact_phone?: string // Ensure this line is present
+  contact_phone?: string
 
   // Professional specific
   company?: string
@@ -26,8 +26,8 @@ export interface Profile {
 
   // Corporate/University specific
   organization_name?: string
-  organization_type?: "corporate" | "university" // To distinguish between the two if needed
-  contact_email?: string // Official contact email for the org
+  organization_type?: "corporate" | "university"
+  contact_email?: string
   // Add other relevant fields for corporate/university users
 }
 
