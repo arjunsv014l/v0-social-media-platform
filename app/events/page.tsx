@@ -29,62 +29,77 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState<EventWithAttendance | null>(null)
 
   const fetchEvents = useCallback(async () => {
+    if (loadingEvents) return // Prevent concurrent fetches
+
     setLoadingEvents(true)
-    const { data: eventsData, error: eventsError } = await supabase
-      .from("events")
-      .select("*, creator:profiles!creator_id(*)") // Fetch creator profile
-      .order("created_at", { ascending: false })
+    try {
+      console.log("Fetching events...")
+      const { data: eventsData, error: eventsError } = await supabase
+        .from("events")
+        .select("*, creator:profiles!creator_id(*)")
+        .order("created_at", { ascending: false })
 
-    if (eventsError) {
-      console.error("Error fetching events:", eventsError)
-      toast({ title: "Error", description: "Could not load events.", variant: "destructive" })
-      setAllEvents([])
+      if (eventsError) {
+        console.error("Error fetching events:", eventsError)
+        toast({ title: "Error", description: "Could not load events.", variant: "destructive" })
+        setAllEvents([])
+        return
+      }
+
+      if (!user?.id) {
+        setAllEvents(eventsData.map((e) => ({ ...e, creator: e.creator as Profile | null })) || [])
+        return
+      }
+
+      const { data: attendanceData, error: attendanceError } = await supabase
+        .from("event_attendees")
+        .select("event_id")
+        .eq("user_id", user.id)
+
+      if (attendanceError) {
+        console.error("Error fetching event attendance:", attendanceError)
+        // Continue without attendance data if it fails
+      }
+
+      const attendedIds = new Set(attendanceData?.map((a) => a.event_id) || [])
+      setMyEventIds(attendedIds)
+
+      const eventsWithAttendanceStatus = eventsData.map((event) => ({
+        ...event,
+        creator: event.creator as Profile | null,
+        isAttending: attendedIds.has(event.id),
+      }))
+
+      setAllEvents(eventsWithAttendanceStatus)
+    } catch (error) {
+      console.error("Unexpected error fetching events:", error)
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" })
+    } finally {
       setLoadingEvents(false)
-      return
     }
-
-    if (!user?.id) {
-      setAllEvents(eventsData.map((e) => ({ ...e, creator: e.creator as Profile | null })) || [])
-      setLoadingEvents(false)
-      return
-    }
-
-    const { data: attendanceData, error: attendanceError } = await supabase
-      .from("event_attendees")
-      .select("event_id")
-      .eq("user_id", user.id)
-
-    if (attendanceError) {
-      console.error("Error fetching event attendance:", attendanceError)
-      // Continue without attendance data if it fails
-    }
-
-    const attendedIds = new Set(attendanceData?.map((a) => a.event_id) || [])
-    setMyEventIds(attendedIds)
-
-    const eventsWithAttendanceStatus = eventsData.map((event) => ({
-      ...event,
-      creator: event.creator as Profile | null,
-      isAttending: attendedIds.has(event.id),
-    }))
-
-    setAllEvents(eventsWithAttendanceStatus)
-    setLoadingEvents(false)
   }, [user?.id, toast])
 
   useEffect(() => {
     fetchEvents()
 
+    // Create a stable subscription that doesn't trigger on every render
     const eventsChannel = supabase
       .channel("realtime-events")
-      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, fetchEvents)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendees" }, fetchEvents)
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
+        console.log("Events table changed, fetching events...")
+        fetchEvents()
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendees" }, () => {
+        console.log("Event attendees changed, fetching events...")
+        fetchEvents()
+      })
       .subscribe()
 
     return () => {
+      console.log("Cleaning up Supabase channel")
       supabase.removeChannel(eventsChannel)
     }
-  }, [fetchEvents])
+  }, []) // Remove fetchEvents from dependency array to prevent continuous re-subscriptions
 
   const handleToggleAttendance = async (event: EventWithAttendance) => {
     if (!user?.id) {
