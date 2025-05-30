@@ -11,15 +11,15 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { BellIcon, EyeIcon, LockIcon, PaletteIcon, UserIcon, Loader2, Upload } from "lucide-react"
+import { BellIcon, EyeIcon, LockIcon, PaletteIcon, UserIcon, Upload, Loader2 } from "lucide-react"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase/client"
+import { useToast } from "@/components/ui/use-toast"
 import { useSearchParams } from "next/navigation"
 
 export default function SettingsPage() {
-  const { user, profile, updateProfile } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const { toast } = useToast()
   const searchParams = useSearchParams()
   const defaultTab = searchParams.get("tab") || "profile"
@@ -33,37 +33,22 @@ export default function SettingsPage() {
     graduationYear: "",
     university: "",
     avatarUrl: "",
+    email: "",
   })
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string>("")
-  const [loading, setLoading] = useState(false)
+
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   })
-  const [passwordLoading, setPasswordLoading] = useState(false)
 
-  // Notification preferences (UI only for now)
-  const [notifications, setNotifications] = useState({
-    posts: true,
-    messages: true,
-    events: false,
-    courses: true,
-    friends: true,
-  })
-
-  // Privacy settings (UI only for now)
-  const [privacy, setPrivacy] = useState({
-    profileVisibility: "friends",
-    showEmail: false,
-    showPhone: false,
-    allowMessages: true,
-  })
+  const [loading, setLoading] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
 
   // Initialize form with profile data
   useEffect(() => {
-    if (profile) {
+    if (profile && user) {
       const nameParts = profile.full_name?.split(" ") || ["", ""]
       setFormData({
         firstName: nameParts[0] || "",
@@ -74,85 +59,75 @@ export default function SettingsPage() {
         graduationYear: profile.graduation_year?.toString() || "",
         university: profile.university || "",
         avatarUrl: profile.avatar_url || "",
+        email: user.email || "",
       })
-      setAvatarPreview(profile.avatar_url || "")
     }
-  }, [profile])
+  }, [profile, user])
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setAvatarFile(file)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setAvatarPreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !user) return
+
+    setUploadingAvatar(true)
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`
+      const filePath = `avatars/${fileName}`
+
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(filePath)
+
+      setFormData((prev) => ({ ...prev, avatarUrl: publicUrl }))
+
+      toast({
+        title: "Avatar uploaded! 📸",
+        description: "Your profile picture has been uploaded successfully.",
+      })
+    } catch (error: any) {
+      console.error("Error uploading avatar:", error)
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload avatar. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingAvatar(false)
     }
-  }
-
-  const uploadAvatar = async (file: File): Promise<string | null> => {
-    if (!user) return null
-
-    const fileExt = file.name.split(".").pop()
-    const fileName = `${user.id}-${Math.random()}.${fileExt}`
-    const filePath = `avatars/${fileName}`
-
-    const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file)
-
-    if (uploadError) {
-      console.error("Error uploading avatar:", uploadError)
-      return null
-    }
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(filePath)
-
-    return data.publicUrl
   }
 
   const handleProfileSave = async () => {
     if (!user) return
 
-    if (!formData.firstName || !formData.lastName) {
-      toast({
-        title: "Missing Information",
-        description: "First name and last name are required.",
-        variant: "destructive",
-      })
-      return
-    }
-
     setLoading(true)
     try {
-      let avatarUrl = formData.avatarUrl
-
-      // Upload new avatar if selected
-      if (avatarFile) {
-        const uploadedUrl = await uploadAvatar(avatarFile)
-        if (uploadedUrl) {
-          avatarUrl = uploadedUrl
-        }
-      }
-
-      // Update profile
-      await updateProfile({
-        full_name: `${formData.firstName} ${formData.lastName}`,
+      const profileUpdate = {
+        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         username: formData.username,
-        bio: formData.bio,
+        bio: formData.bio || null,
         major: formData.major,
         graduation_year: formData.graduationYear ? Number.parseInt(formData.graduationYear) : null,
         university: formData.university,
-        avatar_url: avatarUrl,
+        avatar_url: formData.avatarUrl || null,
         is_profile_complete: true, // Ensure profile is marked as complete
-      })
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error } = await supabase.from("profiles").update(profileUpdate).eq("id", user.id)
+
+      if (error) throw error
+
+      // Refresh the profile in auth context to sync across the app
+      await refreshProfile()
 
       toast({
-        title: "Profile Updated! ✅",
-        description: "Your profile has been saved successfully.",
+        title: "Profile updated! ✅",
+        description: "Your profile information has been saved successfully.",
       })
-
-      // Clear avatar file after successful upload
-      setAvatarFile(null)
     } catch (error: any) {
       console.error("Error updating profile:", error)
       toast({
@@ -166,9 +141,9 @@ export default function SettingsPage() {
   }
 
   const handlePasswordChange = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
       toast({
-        title: "Missing Information",
+        title: "Missing information",
         description: "Please fill in all password fields.",
         variant: "destructive",
       })
@@ -177,8 +152,8 @@ export default function SettingsPage() {
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast({
-        title: "Password Mismatch",
-        description: "New password and confirmation don't match.",
+        title: "Passwords don't match",
+        description: "Please make sure your new passwords match.",
         variant: "destructive",
       })
       return
@@ -186,14 +161,14 @@ export default function SettingsPage() {
 
     if (passwordData.newPassword.length < 6) {
       toast({
-        title: "Password Too Short",
+        title: "Password too short",
         description: "Password must be at least 6 characters long.",
         variant: "destructive",
       })
       return
     }
 
-    setPasswordLoading(true)
+    setChangingPassword(true)
     try {
       const { error } = await supabase.auth.updateUser({
         password: passwordData.newPassword,
@@ -201,26 +176,25 @@ export default function SettingsPage() {
 
       if (error) throw error
 
-      toast({
-        title: "Password Updated! ✅",
-        description: "Your password has been changed successfully.",
-      })
-
-      // Clear password fields
       setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       })
+
+      toast({
+        title: "Password updated! 🔒",
+        description: "Your password has been changed successfully.",
+      })
     } catch (error: any) {
-      console.error("Error updating password:", error)
+      console.error("Error changing password:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to update password. Please try again.",
+        description: error.message || "Failed to change password. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setPasswordLoading(false)
+      setChangingPassword(false)
     }
   }
 
@@ -274,32 +248,36 @@ export default function SettingsPage() {
                   {/* Avatar Upload */}
                   <div className="flex items-center gap-6">
                     <div className="relative">
-                      <div className="h-24 w-24 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
-                        {avatarPreview ? (
+                      <div className="h-24 w-24 rounded-full overflow-hidden border-4 border-gray-200 dark:border-gray-700">
+                        {formData.avatarUrl ? (
                           <img
-                            src={avatarPreview || "/placeholder.svg"}
+                            src={formData.avatarUrl || "/placeholder.svg"}
                             alt="Profile"
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <UserIcon className="h-12 w-12 text-gray-400" />
+                          <div className="h-full w-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 flex items-center justify-center">
+                            <UserIcon className="h-8 w-8 text-gray-400" />
                           </div>
                         )}
                       </div>
                       <label
                         htmlFor="avatar-upload"
-                        className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center cursor-pointer"
+                        className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center cursor-pointer transition-colors"
                       >
-                        <Upload className="h-4 w-4 text-white" />
+                        {uploadingAvatar ? (
+                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4 text-white" />
+                        )}
                       </label>
                       <input
                         id="avatar-upload"
                         type="file"
                         accept="image/*"
-                        onChange={handleAvatarChange}
+                        onChange={handleAvatarUpload}
                         className="hidden"
-                        disabled={loading}
+                        disabled={uploadingAvatar || loading}
                       />
                     </div>
                     <div className="space-y-2">
@@ -323,7 +301,7 @@ export default function SettingsPage() {
                       <Input
                         id="firstName"
                         value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
                         disabled={loading}
                       />
                     </div>
@@ -332,7 +310,7 @@ export default function SettingsPage() {
                       <Input
                         id="lastName"
                         value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
                         disabled={loading}
                       />
                     </div>
@@ -343,7 +321,7 @@ export default function SettingsPage() {
                     <Input
                       id="username"
                       value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
                       disabled={loading}
                     />
                   </div>
@@ -354,7 +332,7 @@ export default function SettingsPage() {
                       id="bio"
                       placeholder="Tell us about yourself..."
                       value={formData.bio}
-                      onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
                       rows={3}
                       disabled={loading}
                     />
@@ -364,11 +342,11 @@ export default function SettingsPage() {
                     <Label htmlFor="university">University</Label>
                     <Select
                       value={formData.university}
-                      onValueChange={(value) => setFormData({ ...formData, university: value })}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, university: value }))}
                       disabled={loading}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select your university" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Stanford University">Stanford University</SelectItem>
@@ -387,11 +365,11 @@ export default function SettingsPage() {
                       <Label htmlFor="major">Major</Label>
                       <Select
                         value={formData.major}
-                        onValueChange={(value) => setFormData({ ...formData, major: value })}
+                        onValueChange={(value) => setFormData((prev) => ({ ...prev, major: value }))}
                         disabled={loading}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select your major" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Computer Science">Computer Science</SelectItem>
@@ -411,11 +389,11 @@ export default function SettingsPage() {
                       <Label htmlFor="year">Graduation Year</Label>
                       <Select
                         value={formData.graduationYear}
-                        onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}
+                        onValueChange={(value) => setFormData((prev) => ({ ...prev, graduationYear: value }))}
                         disabled={loading}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select year" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="2024">2024</SelectItem>
@@ -447,11 +425,85 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="account" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Account Settings</CardTitle>
+                  <CardDescription>Manage your account security and preferences</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input id="email" type="email" value={formData.email} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">
+                      Email changes require verification and are not currently supported in this demo.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Change Password</h3>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <Input
+                        id="currentPassword"
+                        type="password"
+                        placeholder="Enter current password"
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                        disabled={changingPassword}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        placeholder="Enter new password"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                        disabled={changingPassword}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                        disabled={changingPassword}
+                      />
+                    </div>
+
+                    <Button
+                      onClick={handlePasswordChange}
+                      disabled={changingPassword}
+                      className="bg-gradient-to-r from-green-500 to-blue-600"
+                    >
+                      {changingPassword ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Changing Password...
+                        </>
+                      ) : (
+                        "Change Password"
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Other tabs remain the same but are now UI-only */}
             <TabsContent value="notifications" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Notification Preferences</CardTitle>
-                  <CardDescription>Choose what notifications you want to receive</CardDescription>
+                  <CardDescription>Choose what notifications you want to receive (UI Demo)</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-4">
@@ -460,62 +512,23 @@ export default function SettingsPage() {
                         <h4 className="font-medium">New Posts</h4>
                         <p className="text-sm text-muted-foreground">Get notified when friends share new posts</p>
                       </div>
-                      <Switch
-                        checked={notifications.posts}
-                        onCheckedChange={(checked) => setNotifications({ ...notifications, posts: checked })}
-                      />
+                      <Switch defaultChecked />
                     </div>
-
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-medium">Messages</h4>
                         <p className="text-sm text-muted-foreground">Get notified about new direct messages</p>
                       </div>
-                      <Switch
-                        checked={notifications.messages}
-                        onCheckedChange={(checked) => setNotifications({ ...notifications, messages: checked })}
-                      />
+                      <Switch defaultChecked />
                     </div>
-
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-medium">Events</h4>
                         <p className="text-sm text-muted-foreground">Get notified about upcoming campus events</p>
                       </div>
-                      <Switch
-                        checked={notifications.events}
-                        onCheckedChange={(checked) => setNotifications({ ...notifications, events: checked })}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Course Updates</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified about assignment deadlines and course announcements
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.courses}
-                        onCheckedChange={(checked) => setNotifications({ ...notifications, courses: checked })}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Friend Requests</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when someone sends you a friend request
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.friends}
-                        onCheckedChange={(checked) => setNotifications({ ...notifications, friends: checked })}
-                      />
+                      <Switch />
                     </div>
                   </div>
-
-                  <Button className="bg-gradient-to-r from-green-500 to-blue-600">Save Notification Settings</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -524,54 +537,23 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Privacy Settings</CardTitle>
-                  <CardDescription>Control who can see your information and contact you</CardDescription>
+                  <CardDescription>Control who can see your information (UI Demo)</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Profile Visibility</Label>
-                      <Select
-                        value={privacy.profileVisibility}
-                        onValueChange={(value) => setPrivacy({ ...privacy, profileVisibility: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="public">Public - Anyone can see</SelectItem>
-                          <SelectItem value="university">University - Only students from your university</SelectItem>
-                          <SelectItem value="friends">Friends - Only your friends</SelectItem>
-                          <SelectItem value="private">Private - Only you</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Show Email Address</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Allow others to see your email address on your profile
-                        </p>
-                      </div>
-                      <Switch
-                        checked={privacy.showEmail}
-                        onCheckedChange={(checked) => setPrivacy({ ...privacy, showEmail: checked })}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Allow Direct Messages</h4>
-                        <p className="text-sm text-muted-foreground">Allow anyone to send you direct messages</p>
-                      </div>
-                      <Switch
-                        checked={privacy.allowMessages}
-                        onCheckedChange={(checked) => setPrivacy({ ...privacy, allowMessages: checked })}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Profile Visibility</Label>
+                    <Select defaultValue="friends">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">Public - Anyone can see</SelectItem>
+                        <SelectItem value="university">University - Only students from your university</SelectItem>
+                        <SelectItem value="friends">Friends - Only your friends</SelectItem>
+                        <SelectItem value="private">Private - Only you</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-
-                  <Button className="bg-gradient-to-r from-purple-500 to-pink-600">Save Privacy Settings</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -580,120 +562,24 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Appearance Settings</CardTitle>
-                  <CardDescription>Customize how CampusConnect looks and feels</CardDescription>
+                  <CardDescription>Customize how CampusConnect looks (UI Demo)</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Theme</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Theme settings can be changed using the theme toggle in the sidebar.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Font Size</Label>
-                      <Select defaultValue="medium">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="small">Small</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="large">Large</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <Button className="bg-gradient-to-r from-pink-500 to-orange-600">Save Appearance Settings</Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="account" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Account Settings</CardTitle>
-                  <CardDescription>Manage your account security and preferences</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input id="email" type="email" value={user?.email || ""} disabled />
-                      <p className="text-xs text-muted-foreground">
-                        Email changes require verification and are handled through account settings.
-                      </p>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Change Password</h3>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="currentPassword">Current Password</Label>
-                        <Input
-                          id="currentPassword"
-                          type="password"
-                          placeholder="Enter current password"
-                          value={passwordData.currentPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          disabled={passwordLoading}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="newPassword">New Password</Label>
-                        <Input
-                          id="newPassword"
-                          type="password"
-                          placeholder="Enter new password"
-                          value={passwordData.newPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          disabled={passwordLoading}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                        <Input
-                          id="confirmPassword"
-                          type="password"
-                          placeholder="Confirm new password"
-                          value={passwordData.confirmPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          disabled={passwordLoading}
-                        />
-                      </div>
-
-                      <Button
-                        onClick={handlePasswordChange}
-                        className="bg-gradient-to-r from-blue-500 to-purple-600"
-                        disabled={passwordLoading}
-                      >
-                        {passwordLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Updating Password...
-                          </>
-                        ) : (
-                          "Change Password"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="border-t pt-6">
-                    <h3 className="text-lg font-semibold text-red-600 mb-2">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      These actions cannot be undone. Please be careful.
+                  <div className="space-y-2">
+                    <Label>Theme</Label>
+                    <Select defaultValue="light">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="light">🌞 Light Mode</SelectItem>
+                        <SelectItem value="dark">🌙 Dark Mode</SelectItem>
+                        <SelectItem value="system">💻 System Default</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Use the theme toggle in the sidebar for actual theme changes.
                     </p>
-                    <div className="flex gap-4">
-                      <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-                        Deactivate Account
-                      </Button>
-                      <Button variant="destructive">Delete Account</Button>
-                    </div>
                   </div>
                 </CardContent>
               </Card>

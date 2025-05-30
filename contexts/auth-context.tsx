@@ -16,7 +16,6 @@ interface AuthContextType {
   signUp: (email: string, password: string, userData: any) => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
-  updateProfile: (updates: Partial<Profile>) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -46,32 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user?.id) {
       const updatedProfile = await fetchProfile(user.id)
       setProfile(updatedProfile)
+      return updatedProfile
     }
+    return null
   }, [user?.id, fetchProfile])
-
-  const updateProfile = useCallback(
-    async (updates: Partial<Profile>) => {
-      if (!user?.id) return
-
-      // Optimistically update local state
-      setProfile((prev) => (prev ? { ...prev, ...updates } : null))
-
-      try {
-        const { error } = await supabase.from("profiles").update(updates).eq("id", user.id)
-
-        if (error) throw error
-
-        // Refresh to ensure we have the latest data
-        await refreshProfile()
-      } catch (error) {
-        console.error("Error updating profile:", error)
-        // Revert optimistic update on error
-        await refreshProfile()
-        throw error
-      }
-    },
-    [user?.id, refreshProfile],
-  )
 
   useEffect(() => {
     const fetchUserAndProfile = async () => {
@@ -100,7 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       const activeUser = session?.user ?? null
       setUser(activeUser)
-
       if (activeUser) {
         const userProfile = await fetchProfile(activeUser.id)
         setProfile(userProfile)
@@ -117,11 +93,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Effect for handling redirection based on profile completion
   useEffect(() => {
     if (!loading && authChecked && user && profile) {
-      // If profile is incomplete and user is not on profile completion page or public pages
-      if (!profile.is_profile_complete && pathname !== profileCompletionPath && !publicPaths.includes(pathname)) {
+      // If profile is not complete and user is not on public paths or profile completion path
+      if (!profile.is_profile_complete && !publicPaths.includes(pathname) && pathname !== profileCompletionPath) {
         router.push(profileCompletionPath)
       }
-      // If profile is complete and user is on profile completion page, redirect to dashboard
+      // If profile is complete and user is on profile completion path, redirect to dashboard
       else if (profile.is_profile_complete && pathname === profileCompletionPath) {
         router.push("/")
       }
@@ -131,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    // Redirection will be handled by the useEffect above
+    // Redirection will be handled by the useEffect above after profile is fetched
   }
 
   const signUp = async (email: string, password: string, userData: any) => {
@@ -147,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           major: userData.major,
           graduationYear: userData.graduationYear,
           university: userData.university,
-          is_profile_complete: false,
+          is_profile_complete: false, // Explicitly set to false on signup
         },
       },
     })
@@ -156,7 +132,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Sign up error:", error)
       throw error
     }
-    // The user will be redirected to profile completion by the useEffect
+    // The trigger 'handle_new_user' in Supabase will create the profile.
+    // The onAuthStateChange listener will fetch it and redirect to profile completion.
   }
 
   const signOut = async () => {
@@ -169,19 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        authChecked,
-        signIn,
-        signUp,
-        signOut,
-        refreshProfile,
-        updateProfile,
-      }}
-    >
+    <AuthContext.Provider value={{ user, profile, loading, authChecked, signIn, signUp, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

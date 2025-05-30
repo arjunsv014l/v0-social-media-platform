@@ -3,26 +3,22 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, UserIcon, Upload } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ui/use-toast"
-import { useRouter } from "next/navigation"
-import { createClient } from "@supabase/supabase-js"
-
-const supabaseUrl = "https://your-supabase-url.supabase.co"
-const supabaseKey = "your-supabase-key"
-const supabase = createClient(supabaseUrl, supabaseKey)
+import { Loader2, Upload, User } from "lucide-react"
 
 export default function CompleteProfilePage() {
-  const { user, profile, updateProfile, loading: authLoading } = useAuth()
-  const { toast } = useToast()
+  const { user, profile, refreshProfile } = useAuth()
   const router = useRouter()
+  const { toast } = useToast()
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -35,10 +31,9 @@ export default function CompleteProfilePage() {
     avatarUrl: "",
   })
   const [loading, setLoading] = useState(false)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string>("")
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  // Initialize form with existing profile data
+  // Initialize form with existing profile data if available
   useEffect(() => {
     if (profile) {
       const nameParts = profile.full_name?.split(" ") || ["", ""]
@@ -52,55 +47,68 @@ export default function CompleteProfilePage() {
         university: profile.university || "",
         avatarUrl: profile.avatar_url || "",
       })
-      setAvatarPreview(profile.avatar_url || "")
     }
   }, [profile])
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setAvatarFile(file)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setAvatarPreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  // Redirect if profile is already complete
+  useEffect(() => {
+    if (profile?.is_profile_complete) {
+      router.push("/")
     }
-  }
+  }, [profile, router])
 
-  const uploadAvatar = async (file: File): Promise<string | null> => {
-    if (!user) return null
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !user) return
 
-    const fileExt = file.name.split(".").pop()
-    const fileName = `${user.id}-${Math.random()}.${fileExt}`
-    const filePath = `avatars/${fileName}`
+    setUploadingAvatar(true)
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`
+      const filePath = `avatars/${fileName}`
 
-    const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file)
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file)
 
-    if (uploadError) {
-      console.error("Error uploading avatar:", uploadError)
-      return null
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(filePath)
+
+      setFormData((prev) => ({ ...prev, avatarUrl: publicUrl }))
+
+      toast({
+        title: "Avatar uploaded! 📸",
+        description: "Your profile picture has been uploaded successfully.",
+      })
+    } catch (error: any) {
+      console.error("Error uploading avatar:", error)
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload avatar. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingAvatar(false)
     }
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(filePath)
-
-    return data.publicUrl
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
 
+    // Validate required fields
     if (
       !formData.firstName ||
       !formData.lastName ||
+      !formData.username ||
       !formData.major ||
       !formData.graduationYear ||
       !formData.university
     ) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
+        title: "Missing information",
+        description: "Please fill in all required fields to complete your profile.",
         variant: "destructive",
       })
       return
@@ -108,34 +116,31 @@ export default function CompleteProfilePage() {
 
     setLoading(true)
     try {
-      let avatarUrl = formData.avatarUrl
-
-      // Upload new avatar if selected
-      if (avatarFile) {
-        const uploadedUrl = await uploadAvatar(avatarFile)
-        if (uploadedUrl) {
-          avatarUrl = uploadedUrl
-        }
-      }
-
-      // Update profile
-      await updateProfile({
-        full_name: `${formData.firstName} ${formData.lastName}`,
+      const profileUpdate = {
+        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         username: formData.username,
-        bio: formData.bio,
+        bio: formData.bio || null,
         major: formData.major,
         graduation_year: Number.parseInt(formData.graduationYear),
         university: formData.university,
-        avatar_url: avatarUrl,
+        avatar_url: formData.avatarUrl || null,
         is_profile_complete: true, // Mark profile as complete
-      })
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error } = await supabase.from("profiles").update(profileUpdate).eq("id", user.id)
+
+      if (error) throw error
+
+      // Refresh the profile in auth context
+      await refreshProfile()
 
       toast({
-        title: "Profile Completed! 🎉",
-        description: "Welcome to CampusConnect! Your profile has been set up successfully.",
+        title: "Welcome to CampusConnect! 🎉",
+        description: "Your profile has been completed successfully. Let's explore the campus!",
       })
 
-      // Redirect to dashboard - the useEffect in AuthProvider will handle this
+      // Redirect to dashboard
       router.push("/")
     } catch (error: any) {
       console.error("Error completing profile:", error)
@@ -149,70 +154,77 @@ export default function CompleteProfilePage() {
     }
   }
 
-  if (authLoading) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
-            <UserIcon className="h-8 w-8 text-white" />
+            <User className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Complete Your Profile
           </CardTitle>
-          <CardDescription>Let's set up your profile to get the most out of CampusConnect</CardDescription>
+          <CardDescription className="text-base">
+            Let's set up your profile so you can connect with your campus community
+          </CardDescription>
         </CardHeader>
+
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
             {/* Avatar Upload */}
             <div className="flex flex-col items-center space-y-4">
               <div className="relative">
-                <div className="h-24 w-24 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
-                  {avatarPreview ? (
+                <div className="h-24 w-24 rounded-full overflow-hidden border-4 border-gray-200 dark:border-gray-700">
+                  {formData.avatarUrl ? (
                     <img
-                      src={avatarPreview || "/placeholder.svg"}
-                      alt="Avatar preview"
+                      src={formData.avatarUrl || "/placeholder.svg"}
+                      alt="Profile"
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                      <UserIcon className="h-12 w-12 text-gray-400" />
+                    <div className="h-full w-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 flex items-center justify-center">
+                      <User className="h-8 w-8 text-gray-400" />
                     </div>
                   )}
                 </div>
                 <label
                   htmlFor="avatar-upload"
-                  className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center cursor-pointer"
+                  className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center cursor-pointer transition-colors"
                 >
-                  <Upload className="h-4 w-4 text-white" />
+                  {uploadingAvatar ? (
+                    <Loader2 className="h-4 w-4 text-white animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 text-white" />
+                  )}
                 </label>
                 <input
                   id="avatar-upload"
                   type="file"
                   accept="image/*"
-                  onChange={handleAvatarChange}
+                  onChange={handleAvatarUpload}
                   className="hidden"
-                  disabled={loading}
+                  disabled={uploadingAvatar || loading}
                 />
               </div>
               <p className="text-sm text-muted-foreground">Upload a profile picture</p>
             </div>
 
-            {/* Basic Information */}
+            {/* Name Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name *</Label>
                 <Input
                   id="firstName"
                   value={formData.firstName}
-                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
                   placeholder="John"
                   required
                   disabled={loading}
@@ -223,7 +235,7 @@ export default function CompleteProfilePage() {
                 <Input
                   id="lastName"
                   value={formData.lastName}
-                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
                   placeholder="Doe"
                   required
                   disabled={loading}
@@ -231,96 +243,105 @@ export default function CompleteProfilePage() {
               </div>
             </div>
 
+            {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Username *</Label>
               <Input
                 id="username"
                 value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
                 placeholder="johndoe"
+                required
                 disabled={loading}
               />
+              <p className="text-xs text-muted-foreground">This will be your unique identifier on the platform</p>
             </div>
 
+            {/* Bio */}
             <div className="space-y-2">
               <Label htmlFor="bio">Bio</Label>
               <Textarea
                 id="bio"
                 value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                placeholder="Tell us about yourself..."
+                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+                placeholder="Tell us a bit about yourself..."
                 rows={3}
                 disabled={loading}
               />
             </div>
 
             {/* Academic Information */}
-            <div className="space-y-2">
-              <Label htmlFor="university">University *</Label>
-              <Select
-                value={formData.university}
-                onValueChange={(value) => setFormData({ ...formData, university: value })}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your university" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Stanford University">Stanford University</SelectItem>
-                  <SelectItem value="MIT">MIT</SelectItem>
-                  <SelectItem value="Harvard University">Harvard University</SelectItem>
-                  <SelectItem value="UC Berkeley">UC Berkeley</SelectItem>
-                  <SelectItem value="UCLA">UCLA</SelectItem>
-                  <SelectItem value="University of Washington">University of Washington</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Academic Information</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="major">Major *</Label>
+                <Label htmlFor="university">University *</Label>
                 <Select
-                  value={formData.major}
-                  onValueChange={(value) => setFormData({ ...formData, major: value })}
+                  value={formData.university}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, university: value }))}
                   disabled={loading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select your major" />
+                    <SelectValue placeholder="Select your university" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Computer Science">Computer Science</SelectItem>
-                    <SelectItem value="Business Administration">Business Administration</SelectItem>
-                    <SelectItem value="Engineering">Engineering</SelectItem>
-                    <SelectItem value="Psychology">Psychology</SelectItem>
-                    <SelectItem value="Biology">Biology</SelectItem>
-                    <SelectItem value="Mathematics">Mathematics</SelectItem>
-                    <SelectItem value="English">English</SelectItem>
-                    <SelectItem value="History">History</SelectItem>
-                    <SelectItem value="Art">Art</SelectItem>
+                    <SelectItem value="Stanford University">Stanford University</SelectItem>
+                    <SelectItem value="MIT">MIT</SelectItem>
+                    <SelectItem value="Harvard University">Harvard University</SelectItem>
+                    <SelectItem value="UC Berkeley">UC Berkeley</SelectItem>
+                    <SelectItem value="UCLA">UCLA</SelectItem>
+                    <SelectItem value="University of Washington">University of Washington</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="graduationYear">Graduation Year *</Label>
-                <Select
-                  value={formData.graduationYear}
-                  onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}
-                  disabled={loading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2026">2026</SelectItem>
-                    <SelectItem value="2027">2027</SelectItem>
-                    <SelectItem value="2028">2028</SelectItem>
-                    <SelectItem value="2029">2029</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="major">Major *</Label>
+                  <Select
+                    value={formData.major}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, major: value }))}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select your major" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Computer Science">Computer Science</SelectItem>
+                      <SelectItem value="Business Administration">Business Administration</SelectItem>
+                      <SelectItem value="Engineering">Engineering</SelectItem>
+                      <SelectItem value="Psychology">Psychology</SelectItem>
+                      <SelectItem value="Biology">Biology</SelectItem>
+                      <SelectItem value="Mathematics">Mathematics</SelectItem>
+                      <SelectItem value="English">English</SelectItem>
+                      <SelectItem value="History">History</SelectItem>
+                      <SelectItem value="Art">Art</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="graduationYear">Graduation Year *</Label>
+                  <Select
+                    value={formData.graduationYear}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, graduationYear: value }))}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2024">2024</SelectItem>
+                      <SelectItem value="2025">2025</SelectItem>
+                      <SelectItem value="2026">2026</SelectItem>
+                      <SelectItem value="2027">2027</SelectItem>
+                      <SelectItem value="2028">2028</SelectItem>
+                      <SelectItem value="2029">2029</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -328,10 +349,11 @@ export default function CompleteProfilePage() {
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
               disabled={loading}
+              size="lg"
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Completing Profile...
                 </>
               ) : (
