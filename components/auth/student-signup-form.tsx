@@ -7,8 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/contexts/auth-context" // Corrected import path
 import { useToast } from "@/components/ui/use-toast"
+
+const colleges = ["SIMATS", "VIT", "SRM"]
+const yearsOfStudy = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year (Integrated)"]
+const degrees = ["B.Tech CSE", "B.Tech ECE", "B.Tech MECH", "BBA", "MBA", "B.Sc Physics", "M.Sc Chemistry", "Other"]
 
 export default function StudentSignupForm() {
   const [showPassword, setShowPassword] = useState(false)
@@ -18,9 +22,10 @@ export default function StudentSignupForm() {
     lastName: "",
     email: "",
     password: "",
-    university: "",
-    major: "",
-    graduationYear: "",
+    college: "",
+    major: "", // Kept as major, will map to degree or be part of it
+    degree: "",
+    year_of_study: "",
     studentId: "",
   })
   const { signUp } = useAuth()
@@ -28,17 +33,29 @@ export default function StudentSignupForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.college || !formData.year_of_study || !formData.degree) {
+      toast({
+        title: "Missing Information",
+        description: "Please select your college, year of study, and degree.",
+        variant: "destructive",
+      })
+      return
+    }
     setLoading(true)
 
+    const studentData = {
+      ...formData,
+      userType: "student", // Added for clarity in signUp call
+      // Role will be constructed in AuthContext or server-side trigger based on these fields
+    }
+
     try {
-      await signUp(formData.email, formData.password, {
-        ...formData,
-        userType: "student",
-      })
+      await signUp(formData.email, formData.password, studentData, "student")
       toast({
         title: "Welcome to CampusConnect! 🎓",
-        description: "Your student account has been created successfully.",
+        description: "Your student account has been created successfully. Redirecting...",
       })
+      // Redirection will be handled by AuthContext
     } catch (error: any) {
       toast({
         title: "Error",
@@ -54,9 +71,9 @@ export default function StudentSignupForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="firstName">First Name *</Label>
+          <Label htmlFor="firstName-student">First Name *</Label>
           <Input
-            id="firstName"
+            id="firstName-student"
             value={formData.firstName}
             onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
             placeholder="John"
@@ -65,9 +82,9 @@ export default function StudentSignupForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="lastName">Last Name *</Label>
+          <Label htmlFor="lastName-student">Last Name *</Label>
           <Input
-            id="lastName"
+            id="lastName-student"
             value={formData.lastName}
             onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
             placeholder="Doe"
@@ -78,9 +95,9 @@ export default function StudentSignupForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="email">University Email *</Label>
+        <Label htmlFor="email-student">University Email *</Label>
         <Input
-          id="email"
+          id="email-student"
           type="email"
           value={formData.email}
           onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
@@ -91,9 +108,9 @@ export default function StudentSignupForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="studentId">Student ID</Label>
+        <Label htmlFor="studentId-student">Student ID</Label>
         <Input
-          id="studentId"
+          id="studentId-student"
           value={formData.studentId}
           onChange={(e) => setFormData((prev) => ({ ...prev, studentId: e.target.value }))}
           placeholder="STU123456"
@@ -102,99 +119,76 @@ export default function StudentSignupForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="university">University *</Label>
+        <Label htmlFor="college-student">College *</Label>
         <Select
-          value={formData.university}
-          onValueChange={(value) => setFormData((prev) => ({ ...prev, university: value }))}
+          value={formData.college}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, college: value }))}
           disabled={loading}
+          required
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Select your university" />
+          <SelectTrigger id="college-student">
+            <SelectValue placeholder="Select your college" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Stanford University">Stanford University</SelectItem>
-            <SelectItem value="Massachusetts Institute of Technology">MIT</SelectItem>
-            <SelectItem value="Harvard University">Harvard University</SelectItem>
-            <SelectItem value="University of California, Berkeley">UC Berkeley</SelectItem>
-            <SelectItem value="University of California, Los Angeles">UCLA</SelectItem>
-            <SelectItem value="University of California, San Diego">UC San Diego</SelectItem>
-            <SelectItem value="California Institute of Technology">Caltech</SelectItem>
-            <SelectItem value="University of Washington">University of Washington</SelectItem>
-            <SelectItem value="University of Texas at Austin">UT Austin</SelectItem>
-            <SelectItem value="Carnegie Mellon University">Carnegie Mellon</SelectItem>
-            <SelectItem value="Georgia Institute of Technology">Georgia Tech</SelectItem>
-            <SelectItem value="University of Illinois Urbana-Champaign">UIUC</SelectItem>
-            <SelectItem value="University of Michigan">University of Michigan</SelectItem>
-            <SelectItem value="Cornell University">Cornell University</SelectItem>
-            <SelectItem value="Princeton University">Princeton University</SelectItem>
-            <SelectItem value="Yale University">Yale University</SelectItem>
-            <SelectItem value="Columbia University">Columbia University</SelectItem>
-            <SelectItem value="University of Pennsylvania">UPenn</SelectItem>
-            <SelectItem value="Duke University">Duke University</SelectItem>
-            <SelectItem value="Northwestern University">Northwestern</SelectItem>
-            <SelectItem value="University of Southern California">USC</SelectItem>
-            <SelectItem value="New York University">NYU</SelectItem>
-            <SelectItem value="Boston University">Boston University</SelectItem>
-            <SelectItem value="University of Florida">University of Florida</SelectItem>
-            <SelectItem value="Arizona State University">Arizona State</SelectItem>
-            <SelectItem value="Other">Other</SelectItem>
+            {colleges.map((college) => (
+              <SelectItem key={college} value={college}>
+                {college}
+              </SelectItem>
+            ))}
+            <SelectItem value="Other">Other (Not listed)</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="major">Major *</Label>
+          <Label htmlFor="degree-student">Degree *</Label>
           <Select
-            value={formData.major}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, major: value }))}
+            value={formData.degree}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, degree: value }))}
             disabled={loading}
+            required
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select your major" />
+            <SelectTrigger id="degree-student">
+              <SelectValue placeholder="Select your degree" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Computer Science">Computer Science</SelectItem>
-              <SelectItem value="Business Administration">Business Administration</SelectItem>
-              <SelectItem value="Engineering">Engineering</SelectItem>
-              <SelectItem value="Psychology">Psychology</SelectItem>
-              <SelectItem value="Biology">Biology</SelectItem>
-              <SelectItem value="Mathematics">Mathematics</SelectItem>
-              <SelectItem value="English">English</SelectItem>
-              <SelectItem value="History">History</SelectItem>
-              <SelectItem value="Art">Art</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
+              {degrees.map((degree) => (
+                <SelectItem key={degree} value={degree}>
+                  {degree}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="graduationYear">Graduation Year *</Label>
+          <Label htmlFor="year_of_study-student">Year of Study *</Label>
           <Select
-            value={formData.graduationYear}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, graduationYear: value }))}
+            value={formData.year_of_study}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, year_of_study: value }))}
             disabled={loading}
+            required
           >
-            <SelectTrigger>
+            <SelectTrigger id="year_of_study-student">
               <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="2024">2024</SelectItem>
-              <SelectItem value="2025">2025</SelectItem>
-              <SelectItem value="2026">2026</SelectItem>
-              <SelectItem value="2027">2027</SelectItem>
-              <SelectItem value="2028">2028</SelectItem>
-              <SelectItem value="2029">2029</SelectItem>
+              {yearsOfStudy.map((year) => (
+                <SelectItem key={year} value={year}>
+                  {year}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Password *</Label>
+        <Label htmlFor="password-student">Password *</Label>
         <div className="relative">
           <Input
-            id="password"
+            id="password-student"
             type={showPassword ? "text" : "password"}
             value={formData.password}
             onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}

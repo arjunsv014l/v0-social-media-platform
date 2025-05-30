@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2, UniversityIcon } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -65,7 +65,7 @@ export default function LoginPage() {
 
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
                 <GraduationCap className="h-3 w-3" />
                 Student
@@ -77,6 +77,10 @@ export default function LoginPage() {
               <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
                 <Building2 className="h-3 w-3" />
                 Corporate
+              </TabsTrigger>
+              <TabsTrigger value="university" className="flex items-center gap-1 text-xs">
+                <UniversityIcon className="h-3 w-3" /> {/* Or SchoolIcon */}
+                University
               </TabsTrigger>
             </TabsList>
 
@@ -104,6 +108,15 @@ export default function LoginPage() {
                 <Building2 className="h-6 w-6 text-white" />,
                 "Corporate Login",
                 "Find talent and post opportunities",
+              )}
+            </TabsContent>
+
+            <TabsContent value="university">
+              {getTabContent(
+                "university",
+                <UniversityIcon className="h-6 w-6 text-white" /> /* Or SchoolIcon */,
+                "University Login",
+                "Access your institution's dashboard",
               )}
             </TabsContent>
           </Tabs>

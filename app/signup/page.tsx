@@ -3,10 +3,11 @@ import { useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, GraduationCap, Briefcase } from "lucide-react"
+import { Building2, GraduationCap, Briefcase, UniversityIcon } from "lucide-react"
 import StudentSignupForm from "@/components/auth/student-signup-form"
 import ProfessionalSignupForm from "@/components/auth/professional-signup-form"
 import CorporateSignupForm from "@/components/auth/corporate-signup-form"
+import UniversitySignupForm from "@/components/auth/university-signup-form"
 
 export default function SignupPage() {
   const [activeTab, setActiveTab] = useState("student")
@@ -29,7 +30,7 @@ export default function SignupPage() {
 
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-8">
+            <TabsList className="grid w-full grid-cols-4 mb-8">
               <TabsTrigger value="student" className="flex items-center gap-2">
                 <GraduationCap className="h-4 w-4" />
                 Student
@@ -41,6 +42,10 @@ export default function SignupPage() {
               <TabsTrigger value="corporate" className="flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
                 Corporate
+              </TabsTrigger>
+              <TabsTrigger value="university" className="flex items-center gap-2">
+                <UniversityIcon className="h-4 w-4" /> {/* Or SchoolIcon */}
+                University
               </TabsTrigger>
             </TabsList>
 
@@ -66,6 +71,14 @@ export default function SignupPage() {
                 <p className="text-muted-foreground">Find talent, post opportunities, and build your employer brand</p>
               </div>
               <CorporateSignupForm />
+            </TabsContent>
+
+            <TabsContent value="university">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-semibold text-teal-600">University Registration</h3>
+                <p className="text-muted-foreground">Manage your institution's presence and connect with students</p>
+              </div>
+              <UniversitySignupForm />
             </TabsContent>
           </Tabs>
 
