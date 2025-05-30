@@ -19,8 +19,48 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const publicPaths = ["/login", "/signup"]
+// Define route configurations
+const publicPaths = ["/login", "/signup", "/forgot-password"]
 const profileCompletionPath = "/profile/complete"
+
+// Dashboard paths for different user types
+const getDashboardPath = (userType: Profile["user_type"]): string => {
+  switch (userType) {
+    case "student":
+      return "/"
+    case "professional":
+      return "/professional/dashboard"
+    case "corporate":
+      return "/corporate/dashboard"
+    case "university":
+      return "/university/dashboard"
+    default:
+      return "/"
+  }
+}
+
+// Check if user needs profile completion
+const needsProfileCompletion = (profile: Profile | null): boolean => {
+  if (!profile) return false
+  return profile.is_profile_complete !== true
+}
+
+// Check if current path is valid for user type
+const isValidPathForUser = (pathname: string, userType: Profile["user_type"]): boolean => {
+  const dashboardPath = getDashboardPath(userType)
+  const basePath = pathname.split("/")[1] || ""
+  const expectedBase = dashboardPath.split("/")[1] || ""
+
+  // Root path is valid for students
+  if (userType === "student" && pathname === "/") return true
+
+  // Check if user is on their correct dashboard area
+  if (expectedBase && basePath !== expectedBase && pathname !== "/" && !publicPaths.includes(pathname)) {
+    return false
+  }
+
+  return true
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -31,19 +71,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Refs to prevent infinite loops
+  // Refs to prevent infinite redirects
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastRedirectRef = useRef<string | null>(null)
   const isRedirectingRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
+      console.log("[AuthContext] Fetching profile for user:", userId)
       const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error && error.code !== "PGRST116") {
         console.error("[AuthContext] Error fetching profile:", error)
         return null
       }
+
+      console.log(
+        "[AuthContext] Profile fetched:",
+        profileData
+          ? {
+              user_type: profileData.user_type,
+              is_profile_complete: profileData.is_profile_complete,
+            }
+          : null,
+      )
 
       return profileData as Profile | null
     } catch (error) {
@@ -54,17 +105,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
+      console.log("[AuthContext] Refreshing profile...")
       const updatedProfile = await fetchProfile(user.id)
       setProfile(updatedProfile)
+      return updatedProfile
     }
+    return null
   }, [user?.id, fetchProfile])
 
-  // Initialize auth state - runs once on mount
+  // Perform redirect with safeguards
+  const performRedirect = useCallback(
+    (path: string, reason: string) => {
+      if (isRedirectingRef.current || lastRedirectRef.current === path || pathname === path) {
+        console.log(
+          `[AuthContext] Redirect to ${path} skipped - ${isRedirectingRef.current ? "in progress" : "same path"}`,
+        )
+        return
+      }
+
+      console.log(`[AuthContext] Redirecting to ${path} - ${reason}`)
+      isRedirectingRef.current = true
+      lastRedirectRef.current = path
+
+      router.replace(path)
+
+      // Reset redirect flag after delay
+      setTimeout(() => {
+        isRedirectingRef.current = false
+      }, 1500)
+    },
+    [router, pathname],
+  )
+
+  // Initialize auth state
   useEffect(() => {
     let mounted = true
 
     const initializeAuth = async () => {
       try {
+        console.log("[AuthContext] Initializing auth...")
         const {
           data: { session },
         } = await supabase.auth.getSession()
@@ -88,6 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setLoading(false)
           setInitialized(true)
+          console.log("[AuthContext] Auth initialization complete")
         }
       }
     }
@@ -113,6 +193,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         if (mounted) {
           setProfile(null)
+          // Clear redirect tracking on logout
+          lastRedirectRef.current = null
+          isRedirectingRef.current = false
         }
       }
     })
@@ -126,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchProfile])
 
-  // Handle navigation - simplified and debounced
+  // Handle redirections
   useEffect(() => {
     if (!initialized || loading || isRedirectingRef.current) {
       return
@@ -137,83 +220,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(redirectTimeoutRef.current)
     }
 
-    // Debounce redirects to prevent loops
+    // Debounce redirects
     redirectTimeoutRef.current = setTimeout(() => {
       const isPublicPath = publicPaths.includes(pathname)
       const isProfileCompletePage = pathname === profileCompletionPath
 
-      // No user - redirect to login
+      console.log("[AuthContext] Evaluating redirections:", {
+        pathname,
+        user: !!user,
+        profile: profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
+        isPublicPath,
+        isProfileCompletePage,
+      })
+
+      // No user - redirect to login unless on public pages
       if (!user) {
-        if (!isPublicPath && lastRedirectRef.current !== "/login") {
-          lastRedirectRef.current = "/login"
-          isRedirectingRef.current = true
-          router.replace("/login")
-          setTimeout(() => {
-            isRedirectingRef.current = false
-          }, 1000)
+        if (!isPublicPath) {
+          performRedirect("/login", "No user, redirecting to login")
         }
         return
       }
 
-      // User exists but no profile yet - wait
+      // User exists but no profile - wait for profile to load
       if (!profile) {
+        console.log("[AuthContext] User exists but profile not loaded, waiting...")
         return
       }
 
-      // User and profile exist
-      const isProfileComplete = profile.is_profile_complete === true
+      // User and profile exist - handle redirections based on profile state
+      const needsCompletion = needsProfileCompletion(profile)
+      const dashboardPath = getDashboardPath(profile.user_type)
+      const isValidPath = isValidPathForUser(pathname, profile.user_type)
 
-      if (isProfileComplete) {
-        // Profile complete - redirect away from auth/complete pages
-        if ((isPublicPath || isProfileCompletePage) && lastRedirectRef.current !== "/") {
-          const dashboardPath = getDashboardPath(profile.user_type)
-          lastRedirectRef.current = dashboardPath
-          isRedirectingRef.current = true
-          router.replace(dashboardPath)
-          setTimeout(() => {
-            isRedirectingRef.current = false
-          }, 1000)
+      if (needsCompletion) {
+        // Profile incomplete - redirect to completion page
+        if (!isProfileCompletePage && !isPublicPath) {
+          performRedirect(profileCompletionPath, "Profile incomplete, redirecting to completion")
         }
       } else {
-        // Profile incomplete - redirect to complete page
-        if (!isProfileCompletePage && !isPublicPath && lastRedirectRef.current !== profileCompletionPath) {
-          lastRedirectRef.current = profileCompletionPath
-          isRedirectingRef.current = true
-          router.replace(profileCompletionPath)
-          setTimeout(() => {
-            isRedirectingRef.current = false
-          }, 1000)
+        // Profile complete - handle various redirection scenarios
+        if (isPublicPath || isProfileCompletePage) {
+          // Redirect away from auth/completion pages to dashboard
+          performRedirect(dashboardPath, "Profile complete, redirecting to dashboard")
+        } else if (!isValidPath) {
+          // User on wrong dashboard type - redirect to correct one
+          performRedirect(dashboardPath, `Wrong dashboard type, redirecting to ${profile.user_type} dashboard`)
         }
       }
-    }, 100) // 100ms debounce
+    }, 150) // 150ms debounce
 
     return () => {
       if (redirectTimeoutRef.current) {
         clearTimeout(redirectTimeoutRef.current)
       }
     }
-  }, [initialized, loading, user, profile, pathname, router])
-
-  const getDashboardPath = (userType?: Profile["user_type"]) => {
-    switch (userType) {
-      case "student":
-        return "/"
-      case "professional":
-        return "/professional/dashboard"
-      case "corporate":
-        return "/corporate/dashboard"
-      case "university":
-        return "/university/dashboard"
-      default:
-        return "/"
-    }
-  }
+  }, [initialized, loading, user, profile, pathname, performRedirect])
 
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
+      console.log("[AuthContext] Attempting sign in...")
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+
+      // Don't set loading to false here - let the auth state change handle it
+      console.log("[AuthContext] Sign in successful")
     } catch (error) {
       setLoading(false)
       throw error
@@ -223,6 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, userData: any) => {
     setLoading(true)
     try {
+      console.log("[AuthContext] Attempting sign up...")
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -237,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (authError) throw authError
       if (!authData.user) throw new Error("Sign up failed")
 
+      // Create initial profile
       const profileToInsert: Partial<Profile> & { id: string; user_type: Profile["user_type"] } = {
         id: authData.user.id,
         full_name: `${userData.firstName} ${userData.lastName}`,
@@ -245,16 +318,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         is_profile_complete: false,
         updated_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        // Add user-type specific fields
         ...(userData.userType === "student" && {
           university: userData.university,
           major: userData.major,
           graduation_year: userData.graduationYear,
           student_id_number: userData.studentId,
         }),
+        ...(userData.userType === "professional" && {
+          company: userData.company,
+          position: userData.position,
+          experience_years: userData.experienceYears,
+        }),
+        ...(userData.userType === "corporate" && {
+          company: userData.company,
+          industry: userData.industry,
+          company_size: userData.companySize,
+        }),
       }
 
       const { error: profileError } = await supabase.from("profiles").insert(profileToInsert as Profile)
       if (profileError) throw profileError
+
+      console.log("[AuthContext] Sign up successful")
     } catch (error) {
       setLoading(false)
       throw error
@@ -264,12 +350,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true)
     try {
+      console.log("[AuthContext] Signing out...")
       const { error } = await supabase.auth.signOut()
       if (error) throw error
 
-      // Reset refs
+      // Reset redirect tracking
       lastRedirectRef.current = null
       isRedirectingRef.current = false
+
+      console.log("[AuthContext] Sign out successful")
     } catch (error) {
       throw error
     } finally {

@@ -26,7 +26,15 @@ const majors = [
 ]
 const graduationYears = ["2024", "2025", "2026", "2027", "2028", "2029", "2030"]
 
-type StudentProfileFormData = Pick<
+// Professional fields
+const industries = ["Technology", "Finance", "Healthcare", "Education", "Manufacturing", "Consulting", "Other"]
+
+const experienceYears = ["0-1", "2-5", "6-10", "11-15", "16-20", "20+"]
+
+// Corporate fields
+const companySizes = ["1-10", "11-50", "51-200", "201-1000", "1000+"]
+
+type ProfileFormData = Pick<
   Profile,
   | "full_name"
   | "username"
@@ -36,27 +44,22 @@ type StudentProfileFormData = Pick<
   | "student_id_number"
   | "contact_phone"
   | "avatar_url"
+  | "company"
+  | "position"
+  | "experience_years"
+  | "industry"
+  | "company_size"
 >
 
 const AVATAR_BUCKET = "avatars"
 
-export default function CompleteStudentProfilePage() {
+export default function CompleteProfilePage() {
   const { user, profile, refreshProfile, loading } = useAuth()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mountedRef = useRef(true)
 
-  const [formData, setFormData] = useState<Partial<StudentProfileFormData>>({
-    full_name: "",
-    username: "",
-    university: "",
-    major: "",
-    graduation_year: "",
-    student_id_number: "",
-    contact_phone: "",
-    avatar_url: "",
-  })
-
+  const [formData, setFormData] = useState<Partial<ProfileFormData>>({})
   const [pageState, setPageState] = useState<"loading" | "ready" | "error">("loading")
   const [errorMessage, setErrorMessage] = useState<string>("")
   const [formSubmitting, setFormSubmitting] = useState(false)
@@ -82,29 +85,44 @@ export default function CompleteStudentProfilePage() {
       return
     }
 
-    if (profile.user_type !== "student") {
-      setPageState("error")
-      setErrorMessage("This page is only for student users")
-      return
-    }
-
     if (profile.is_profile_complete === true) {
       setPageState("error")
       setErrorMessage("Profile is already complete")
       return
     }
 
-    // Initialize form data
-    setFormData({
+    // Initialize form data based on user type
+    const initialData: Partial<ProfileFormData> = {
       full_name: profile.full_name || "",
       username: profile.username || "",
-      university: profile.university || "",
-      major: profile.major || "",
-      graduation_year: profile.graduation_year || "",
-      student_id_number: profile.student_id_number || "",
       contact_phone: profile.contact_phone || "",
       avatar_url: profile.avatar_url || "",
-    })
+    }
+
+    // Add user-type specific fields
+    if (profile.user_type === "student") {
+      Object.assign(initialData, {
+        university: profile.university || "",
+        major: profile.major || "",
+        graduation_year: profile.graduation_year || "",
+        student_id_number: profile.student_id_number || "",
+      })
+    } else if (profile.user_type === "professional") {
+      Object.assign(initialData, {
+        company: profile.company || "",
+        position: profile.position || "",
+        experience_years: profile.experience_years || "",
+        industry: profile.industry || "",
+      })
+    } else if (profile.user_type === "corporate") {
+      Object.assign(initialData, {
+        company: profile.company || "",
+        industry: profile.industry || "",
+        company_size: profile.company_size || "",
+      })
+    }
+
+    setFormData(initialData)
 
     if (profile.avatar_url) {
       setAvatarPreview(profile.avatar_url)
@@ -123,7 +141,7 @@ export default function CompleteStudentProfilePage() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleSelectChange = (name: keyof StudentProfileFormData, value: string) => {
+  const handleSelectChange = (name: keyof ProfileFormData, value: string) => {
     setFormData({ ...formData, [name]: value })
   }
 
@@ -208,24 +226,53 @@ export default function CompleteStudentProfilePage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-
-    if (
-      !formData.full_name ||
-      !formData.username ||
-      !formData.university ||
-      !formData.major ||
-      !formData.graduation_year
-    ) {
+  const validateForm = () => {
+    if (!formData.full_name || !formData.username) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields (*).",
+        description: "Please fill in your full name and username.",
         variant: "destructive",
       })
-      return
+      return false
     }
+
+    if (profile?.user_type === "student") {
+      if (!formData.university || !formData.major || !formData.graduation_year) {
+        toast({
+          title: "Missing Information",
+          description: "Please fill in all required student fields.",
+          variant: "destructive",
+        })
+        return false
+      }
+    } else if (profile?.user_type === "professional") {
+      if (!formData.company || !formData.position || !formData.experience_years) {
+        toast({
+          title: "Missing Information",
+          description: "Please fill in all required professional fields.",
+          variant: "destructive",
+        })
+        return false
+      }
+    } else if (profile?.user_type === "corporate") {
+      if (!formData.company || !formData.industry || !formData.company_size) {
+        toast({
+          title: "Missing Information",
+          description: "Please fill in all required corporate fields.",
+          variant: "destructive",
+        })
+        return false
+      }
+    }
+
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !profile) return
+
+    if (!validateForm()) return
 
     setFormSubmitting(true)
     let uploadedAvatarUrl = formData.avatar_url
@@ -260,11 +307,11 @@ export default function CompleteStudentProfilePage() {
       }
 
       toast({
-        title: "Profile Updated!",
-        description: "Your student profile is now complete.",
+        title: "Profile Updated! 🎉",
+        description: "Your profile is now complete. Redirecting to your dashboard...",
       })
 
-      // Refresh profile data
+      // Refresh profile data - this will trigger AuthContext redirection
       await refreshProfile()
     } catch (err: any) {
       console.error("Unexpected error:", err)
@@ -308,13 +355,260 @@ export default function CompleteStudentProfilePage() {
     )
   }
 
+  const renderUserTypeSpecificFields = () => {
+    if (!profile) return null
+
+    switch (profile.user_type) {
+      case "student":
+        return (
+          <>
+            {/* University and Major */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="university">University *</Label>
+                <Select
+                  name="university"
+                  value={formData.university || ""}
+                  onValueChange={(value) => handleSelectChange("university", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your university" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {universities.map((uni) => (
+                      <SelectItem key={uni} value={uni}>
+                        {uni}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="major">Major *</Label>
+                <Select
+                  name="major"
+                  value={formData.major || ""}
+                  onValueChange={(value) => handleSelectChange("major", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your major" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {majors.map((major) => (
+                      <SelectItem key={major} value={major}>
+                        {major}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Graduation Year and Student ID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="graduation_year">Graduation Year *</Label>
+                <Select
+                  name="graduation_year"
+                  value={formData.graduation_year || ""}
+                  onValueChange={(value) => handleSelectChange("graduation_year", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select graduation year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {graduationYears.map((year) => (
+                      <SelectItem key={year} value={year}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="student_id_number">Student ID Number</Label>
+                <Input
+                  id="student_id_number"
+                  name="student_id_number"
+                  value={formData.student_id_number || ""}
+                  onChange={handleChange}
+                  placeholder="e.g., S1234567"
+                  disabled={formSubmitting || isUploadingAvatar}
+                />
+              </div>
+            </div>
+          </>
+        )
+
+      case "professional":
+        return (
+          <>
+            {/* Company and Position */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="company">Company *</Label>
+                <Input
+                  id="company"
+                  name="company"
+                  value={formData.company || ""}
+                  onChange={handleChange}
+                  placeholder="e.g., Google Inc."
+                  required
+                  disabled={formSubmitting || isUploadingAvatar}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position">Position *</Label>
+                <Input
+                  id="position"
+                  name="position"
+                  value={formData.position || ""}
+                  onChange={handleChange}
+                  placeholder="e.g., Senior Software Engineer"
+                  required
+                  disabled={formSubmitting || isUploadingAvatar}
+                />
+              </div>
+            </div>
+
+            {/* Experience and Industry */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="experience_years">Years of Experience *</Label>
+                <Select
+                  name="experience_years"
+                  value={formData.experience_years || ""}
+                  onValueChange={(value) => handleSelectChange("experience_years", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select experience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {experienceYears.map((exp) => (
+                      <SelectItem key={exp} value={exp}>
+                        {exp} years
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="industry">Industry</Label>
+                <Select
+                  name="industry"
+                  value={formData.industry || ""}
+                  onValueChange={(value) => handleSelectChange("industry", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {industries.map((industry) => (
+                      <SelectItem key={industry} value={industry}>
+                        {industry}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </>
+        )
+
+      case "corporate":
+        return (
+          <>
+            {/* Company and Industry */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="company">Company Name *</Label>
+                <Input
+                  id="company"
+                  name="company"
+                  value={formData.company || ""}
+                  onChange={handleChange}
+                  placeholder="e.g., Acme Corporation"
+                  required
+                  disabled={formSubmitting || isUploadingAvatar}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="industry">Industry *</Label>
+                <Select
+                  name="industry"
+                  value={formData.industry || ""}
+                  onValueChange={(value) => handleSelectChange("industry", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {industries.map((industry) => (
+                      <SelectItem key={industry} value={industry}>
+                        {industry}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Company Size */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="company_size">Company Size *</Label>
+                <Select
+                  name="company_size"
+                  value={formData.company_size || ""}
+                  onValueChange={(value) => handleSelectChange("company_size", value)}
+                  disabled={formSubmitting || isUploadingAvatar}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companySizes.map((size) => (
+                      <SelectItem key={size} value={size}>
+                        {size} employees
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </>
+        )
+
+      default:
+        return null
+    }
+  }
+
   // Form state
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Complete Your Student Profile
+            Complete Your{" "}
+            {profile?.user_type === "student"
+              ? "Student"
+              : profile?.user_type === "professional"
+                ? "Professional"
+                : "Corporate"}{" "}
+            Profile
           </CardTitle>
           <CardDescription className="text-center">
             Help us tailor your experience. Fields marked with * are required.
@@ -408,87 +702,8 @@ export default function CompleteStudentProfilePage() {
               </div>
             </div>
 
-            {/* University and Major */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="university">University *</Label>
-                <Select
-                  name="university"
-                  value={formData.university || ""}
-                  onValueChange={(value) => handleSelectChange("university", value)}
-                  disabled={formSubmitting || isUploadingAvatar}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your university" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {universities.map((uni) => (
-                      <SelectItem key={uni} value={uni}>
-                        {uni}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="major">Major *</Label>
-                <Select
-                  name="major"
-                  value={formData.major || ""}
-                  onValueChange={(value) => handleSelectChange("major", value)}
-                  disabled={formSubmitting || isUploadingAvatar}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your major" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {majors.map((major) => (
-                      <SelectItem key={major} value={major}>
-                        {major}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Graduation Year and Student ID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="graduation_year">Graduation Year *</Label>
-                <Select
-                  name="graduation_year"
-                  value={formData.graduation_year || ""}
-                  onValueChange={(value) => handleSelectChange("graduation_year", value)}
-                  disabled={formSubmitting || isUploadingAvatar}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select graduation year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {graduationYears.map((year) => (
-                      <SelectItem key={year} value={year}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="student_id_number">Student ID Number</Label>
-                <Input
-                  id="student_id_number"
-                  name="student_id_number"
-                  value={formData.student_id_number || ""}
-                  onChange={handleChange}
-                  placeholder="e.g., S1234567"
-                  disabled={formSubmitting || isUploadingAvatar}
-                />
-              </div>
-            </div>
+            {/* User Type Specific Fields */}
+            {renderUserTypeSpecificFields()}
 
             {/* Contact Phone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -513,7 +728,7 @@ export default function CompleteStudentProfilePage() {
                   Saving Profile...
                 </>
               ) : (
-                "Save and Continue"
+                "Complete Profile & Continue"
               )}
             </Button>
           </form>
