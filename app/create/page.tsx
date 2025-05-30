@@ -8,11 +8,9 @@ import { VideoEditor } from "@/components/video-editor"
 import { ContentTemplates } from "@/components/content-templates"
 import { useAuth } from "@/contexts/auth-context"
 import { Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 export default function CreatePage() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const [activeTab, setActiveTab] = useState("upload")
 
   if (!user || !profile) {

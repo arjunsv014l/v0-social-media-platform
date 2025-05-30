@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, type ChangeEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,7 +46,7 @@ export function VideoUpload() {
       return
     }
 
-    // Check file size (limit to 100MB for example)
+    // Check file size (limit to 100MB)
     if (file.size > 100 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -63,8 +62,7 @@ export function VideoUpload() {
     const objectUrl = URL.createObjectURL(file)
     setVideoPreviewUrl(objectUrl)
 
-    // Generate a thumbnail (this is a simplified approach)
-    // In a real app, you might want to use a server-side function to generate thumbnails
+    // Generate a thumbnail
     setTimeout(() => {
       const video = document.createElement("video")
       video.src = objectUrl
@@ -126,13 +124,15 @@ export function VideoUpload() {
         .upload(videoFilePath, selectedFile, {
           cacheControl: "3600",
           upsert: false,
-          onUploadProgress: (progress) => {
-            const percent = Math.round((progress.loaded / progress.total) * 100)
-            setUploadProgress(percent)
-          },
         })
 
       if (videoError) throw videoError
+
+      // Simulate upload progress for demo
+      for (let i = 0; i <= 100; i += 10) {
+        setUploadProgress(i)
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
 
       // 2. Get the public URL for the uploaded video
       const { data: videoUrl } = supabase.storage.from("videos").getPublicUrl(videoFilePath)
@@ -174,7 +174,6 @@ export function VideoUpload() {
           tags,
           is_public: isPublic,
           file_size: selectedFile.size,
-          // We could add duration here if we extracted it from the video
         })
         .select()
 
@@ -192,9 +191,10 @@ export function VideoUpload() {
       setSelectedFile(null)
       setVideoPreviewUrl(null)
       setThumbnailUrl(null)
+      setUploadProgress(0)
 
-      // Redirect to view the content
-      router.push("/profile") // Or to a dedicated content view page
+      // Redirect to profile to see the content
+      router.push("/profile")
     } catch (error: any) {
       console.error("Upload error:", error)
       toast({

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -147,15 +146,11 @@ export function VideoEditor() {
     }
   }
 
-  // Save edited video (this is a simplified version - in a real app, you'd send to a server for processing)
+  // Save edited video
   const handleSaveEdit = async () => {
     if (!selectedVideo) return
 
     setIsSaving(true)
-
-    // In a real app, you would send the trim points to a server-side function
-    // that would process the video and return a new URL
-    // For this demo, we'll just simulate a delay and show a success message
 
     try {
       // Simulate processing delay
@@ -346,7 +341,7 @@ export function VideoEditor() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center justify-center h-[100px]">
-                    <p className="text-muted-foreground">Crop functionality would be implemented here</p>
+                    <p className="text-muted-foreground">Crop functionality coming soon</p>
                   </div>
                 </CardContent>
               </Card>
@@ -356,7 +351,7 @@ export function VideoEditor() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center justify-center h-[100px]">
-                    <p className="text-muted-foreground">Text overlay functionality would be implemented here</p>
+                    <p className="text-muted-foreground">Text overlay functionality coming soon</p>
                   </div>
                 </CardContent>
               </Card>
@@ -366,7 +361,7 @@ export function VideoEditor() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center justify-center h-[100px]">
-                    <p className="text-muted-foreground">Drawing functionality would be implemented here</p>
+                    <p className="text-muted-foreground">Drawing functionality coming soon</p>
                   </div>
                 </CardContent>
               </Card>
