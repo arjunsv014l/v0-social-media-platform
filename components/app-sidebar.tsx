@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/hooks/use-auth"
+import { useAuth } from "@/contexts/auth-context"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Home, GraduationCap, Briefcase, Building2, LogOut } from "lucide-react"
@@ -68,6 +68,27 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
+  const sidebarTitle = useMemo(() => {
+    switch (profile?.user_type) {
+      case "student":
+        return profile?.full_name || "Student Dashboard"
+      case "university":
+        return `${profile?.affiliated_college || "University"} Portal`
+      case "corporate":
+        return `${profile?.company_name || "Corporate"} Portal`
+      case "professional":
+        return profile?.full_name || "Professional Hub"
+      default:
+        return "Dashboard"
+    }
+  }, [profile])
+
+  const filteredNavigationItems = useMemo(() => {
+    return allNavigationItems.filter(
+      (item) => item.userTypes.includes(profile?.user_type || "") || item.userTypes.includes("all"),
+    )
+  }, [profile])
+
   // Enhanced loading check
   if (authLoading || !profile) {
     return (
@@ -93,27 +114,6 @@ export function AppSidebar({ className }: AppSidebarProps) {
       </aside>
     )
   }
-
-  const sidebarTitle = useMemo(() => {
-    switch (profile.user_type) {
-      case "student":
-        return profile.full_name || "Student Dashboard"
-      case "university":
-        return `${profile.affiliated_college || "University"} Portal`
-      case "corporate":
-        return `${profile.company_name || "Corporate"} Portal`
-      case "professional":
-        return profile.full_name || "Professional Hub"
-      default:
-        return "Dashboard"
-    }
-  }, [profile.user_type, profile.full_name, profile.affiliated_college, profile.company_name])
-
-  const filteredNavigationItems = useMemo(() => {
-    return allNavigationItems.filter(
-      (item) => item.userTypes.includes(profile.user_type) || item.userTypes.includes("all"),
-    )
-  }, [profile.user_type])
 
   return (
     <aside className={cn("fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background sm:flex", className)}>
