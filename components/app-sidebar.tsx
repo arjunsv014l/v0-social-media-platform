@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/context/AuthContext"
 import {
   BookOpenIcon,
   CalendarIcon,
