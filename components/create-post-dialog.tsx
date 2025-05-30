@@ -1,127 +1,114 @@
 "use client"
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea" // Added Textarea import
+import type React from "react"
+
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { ImageIcon, Loader2 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ui/use-toast"
-import { createPost } from "@/lib/actions"
-import { useAuth } from "@/context/AuthContext"
-import { Loader2 } from "lucide-react" // Added Loader2 for loading state
 
-export function CreatePostDialog() {
-  const [title, setTitle] = useState("")
+interface CreatePostDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function CreatePostDialog({ open, onOpenChange }: CreatePostDialogProps) {
   const [content, setContent] = useState("")
-  const [isLoading, setIsLoading] = useState(false) // Added loading state
-  const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
   const { user } = useAuth()
+  const { toast } = useToast()
 
-  const handleSubmit = async () => {
-    if (!title.trim() || !content.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in both title and content.",
-        variant: "destructive",
-      })
-      return
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !content.trim()) return
 
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to create a post.",
-        variant: "destructive",
+    setLoading(true)
+    try {
+      const { error } = await supabase.from("posts").insert({
+        user_id: user.id,
+        content: content.trim(),
       })
-      return
-    }
 
-    setIsLoading(true)
-    const res = await createPost({
-      title: title.trim(),
-      content: content.trim(),
-      authorId: user.id,
-    })
-    setIsLoading(false)
+      if (error) throw error
 
-    if (res?.error) {
       toast({
-        title: "Error Creating Post",
-        description: res.error,
-        variant: "destructive",
+        title: "Post created! 🎉",
+        description: "Your post has been shared with your network.",
       })
-    } else {
-      toast({
-        title: "Success!",
-        description: "Post created successfully.",
-      })
-      setTitle("")
+
       setContent("")
-      // Optionally, close the dialog here if it's controlled by an open/onOpenChange prop
-      // For AlertDialog, it typically closes on AlertDialogAction unless prevented.
+      onOpenChange(false)
+
+      // Trigger a page refresh to show the new post
+      window.location.reload()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create post",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline">Create Post</Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Create a new post</AlertDialogTitle>
-          <AlertDialogDescription>
-            Share your thoughts, experiences, or updates with your campus community.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Your amazing post title"
-              disabled={isLoading}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="content">Content</Label>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[525px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Create a new post</DialogTitle>
+            <DialogDescription>
+              Share your thoughts, experiences, or updates with your campus community
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
             <Textarea
-              id="content"
+              placeholder="What's on your mind? 💭"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What's on your mind? 💭"
-              className="min-h-[120px]"
-              disabled={isLoading}
+              className="min-h-[150px] resize-none"
+              disabled={loading}
             />
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={loading}>
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Add Image
+              </Button>
+            </div>
           </div>
-        </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Posting...
-              </>
-            ) : (
-              "Post"
-            )}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!content.trim() || loading}
+              className="bg-gradient-to-r from-blue-500 to-purple-600"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Posting...
+                </>
+              ) : (
+                "Post"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

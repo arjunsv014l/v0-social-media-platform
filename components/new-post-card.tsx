@@ -3,7 +3,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { CalendarIcon, ImageIcon, MapPinIcon, SmileIcon } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/contexts/auth-context"
 import { CreatePostDialog } from "@/components/create-post-dialog"
 
 export default function NewPostCard() {
