@@ -113,30 +113,25 @@ export default function StudentSignupForm() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="Stanford University">Stanford University</SelectItem>
-            <SelectItem value="Massachusetts Institute of Technology">MIT</SelectItem>
+            <SelectItem value="MIT">Massachusetts Institute of Technology (MIT)</SelectItem>
             <SelectItem value="Harvard University">Harvard University</SelectItem>
-            <SelectItem value="University of California, Berkeley">UC Berkeley</SelectItem>
-            <SelectItem value="University of California, Los Angeles">UCLA</SelectItem>
-            <SelectItem value="University of California, San Diego">UC San Diego</SelectItem>
-            <SelectItem value="California Institute of Technology">Caltech</SelectItem>
-            <SelectItem value="University of Washington">University of Washington</SelectItem>
-            <SelectItem value="University of Texas at Austin">UT Austin</SelectItem>
-            <SelectItem value="Carnegie Mellon University">Carnegie Mellon</SelectItem>
-            <SelectItem value="Georgia Institute of Technology">Georgia Tech</SelectItem>
-            <SelectItem value="University of Illinois Urbana-Champaign">UIUC</SelectItem>
-            <SelectItem value="University of Michigan">University of Michigan</SelectItem>
-            <SelectItem value="Cornell University">Cornell University</SelectItem>
             <SelectItem value="Princeton University">Princeton University</SelectItem>
             <SelectItem value="Yale University">Yale University</SelectItem>
             <SelectItem value="Columbia University">Columbia University</SelectItem>
-            <SelectItem value="University of Pennsylvania">UPenn</SelectItem>
+            <SelectItem value="UC Berkeley">University of California, Berkeley</SelectItem>
+            <SelectItem value="UCLA">University of California, Los Angeles</SelectItem>
+            <SelectItem value="University of Chicago">University of Chicago</SelectItem>
+            <SelectItem value="University of Pennsylvania">University of Pennsylvania</SelectItem>
+            <SelectItem value="Cornell University">Cornell University</SelectItem>
+            <SelectItem value="Northwestern University">Northwestern University</SelectItem>
+            <SelectItem value="Johns Hopkins University">Johns Hopkins University</SelectItem>
             <SelectItem value="Duke University">Duke University</SelectItem>
-            <SelectItem value="Northwestern University">Northwestern</SelectItem>
-            <SelectItem value="University of Southern California">USC</SelectItem>
-            <SelectItem value="New York University">NYU</SelectItem>
+            <SelectItem value="University of Michigan">University of Michigan</SelectItem>
+            <SelectItem value="University of Washington">University of Washington</SelectItem>
+            <SelectItem value="New York University">New York University</SelectItem>
             <SelectItem value="Boston University">Boston University</SelectItem>
-            <SelectItem value="University of Florida">University of Florida</SelectItem>
-            <SelectItem value="Arizona State University">Arizona State</SelectItem>
+            <SelectItem value="University of Texas at Austin">University of Texas at Austin</SelectItem>
+            <SelectItem value="University of Wisconsin-Madison">University of Wisconsin-Madison</SelectItem>
             <SelectItem value="Other">Other</SelectItem>
           </SelectContent>
         </Select>
@@ -159,10 +154,19 @@ export default function StudentSignupForm() {
               <SelectItem value="Engineering">Engineering</SelectItem>
               <SelectItem value="Psychology">Psychology</SelectItem>
               <SelectItem value="Biology">Biology</SelectItem>
+              <SelectItem value="Economics">Economics</SelectItem>
               <SelectItem value="Mathematics">Mathematics</SelectItem>
               <SelectItem value="English">English</SelectItem>
               <SelectItem value="History">History</SelectItem>
+              <SelectItem value="Political Science">Political Science</SelectItem>
+              <SelectItem value="Chemistry">Chemistry</SelectItem>
+              <SelectItem value="Physics">Physics</SelectItem>
               <SelectItem value="Art">Art</SelectItem>
+              <SelectItem value="Communications">Communications</SelectItem>
+              <SelectItem value="Education">Education</SelectItem>
+              <SelectItem value="Medicine">Medicine</SelectItem>
+              <SelectItem value="Nursing">Nursing</SelectItem>
+              <SelectItem value="Sociology">Sociology</SelectItem>
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
@@ -185,6 +189,8 @@ export default function StudentSignupForm() {
               <SelectItem value="2027">2027</SelectItem>
               <SelectItem value="2028">2028</SelectItem>
               <SelectItem value="2029">2029</SelectItem>
+              <SelectItem value="2030">2030</SelectItem>
+              <SelectItem value="2031">2031</SelectItem>
             </SelectContent>
           </Select>
         </div>

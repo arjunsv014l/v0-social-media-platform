@@ -7,15 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { EyeIcon, EyeOffIcon, Loader2, Plus, X } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function ProfessionalSignupForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [skills, setSkills] = useState<string[]>([])
-  const [currentSkill, setCurrentSkill] = useState("")
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -25,24 +23,11 @@ export default function ProfessionalSignupForm() {
     company: "",
     industry: "",
     yearsExperience: "",
-    university: "",
-    graduationYear: "",
     linkedinUrl: "",
-    bio: "",
+    skills: "",
   })
   const { signUp } = useAuth()
   const { toast } = useToast()
-
-  const addSkill = () => {
-    if (currentSkill.trim() && !skills.includes(currentSkill.trim())) {
-      setSkills([...skills, currentSkill.trim()])
-      setCurrentSkill("")
-    }
-  }
-
-  const removeSkill = (skillToRemove: string) => {
-    setSkills(skills.filter((skill) => skill !== skillToRemove))
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,8 +36,11 @@ export default function ProfessionalSignupForm() {
     try {
       await signUp(formData.email, formData.password, {
         ...formData,
-        skills,
         userType: "professional",
+        skills: formData.skills
+          .split(",")
+          .map((skill) => skill.trim())
+          .filter(Boolean),
       })
       toast({
         title: "Welcome to CampusConnect! 💼",
@@ -78,7 +66,7 @@ export default function ProfessionalSignupForm() {
             id="firstName"
             value={formData.firstName}
             onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-            placeholder="John"
+            placeholder="Jane"
             required
             disabled={loading}
           />
@@ -89,7 +77,7 @@ export default function ProfessionalSignupForm() {
             id="lastName"
             value={formData.lastName}
             onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-            placeholder="Doe"
+            placeholder="Smith"
             required
             disabled={loading}
           />
@@ -103,7 +91,7 @@ export default function ProfessionalSignupForm() {
           type="email"
           value={formData.email}
           onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="john.doe@company.com"
+          placeholder="jane.smith@company.com"
           required
           disabled={loading}
         />
@@ -127,7 +115,7 @@ export default function ProfessionalSignupForm() {
             id="company"
             value={formData.company}
             onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-            placeholder="Tech Corp Inc."
+            placeholder="Tech Corp"
             required
             disabled={loading}
           />
@@ -150,11 +138,9 @@ export default function ProfessionalSignupForm() {
               <SelectItem value="Finance">Finance</SelectItem>
               <SelectItem value="Healthcare">Healthcare</SelectItem>
               <SelectItem value="Education">Education</SelectItem>
+              <SelectItem value="Manufacturing">Manufacturing</SelectItem>
               <SelectItem value="Consulting">Consulting</SelectItem>
               <SelectItem value="Marketing">Marketing</SelectItem>
-              <SelectItem value="Engineering">Engineering</SelectItem>
-              <SelectItem value="Design">Design</SelectItem>
-              <SelectItem value="Sales">Sales</SelectItem>
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
@@ -170,76 +156,11 @@ export default function ProfessionalSignupForm() {
               <SelectValue placeholder="Select experience" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1-2">1-2 years</SelectItem>
-              <SelectItem value="3-5">3-5 years</SelectItem>
+              <SelectItem value="0-1">0-1 years</SelectItem>
+              <SelectItem value="2-5">2-5 years</SelectItem>
               <SelectItem value="6-10">6-10 years</SelectItem>
               <SelectItem value="11-15">11-15 years</SelectItem>
               <SelectItem value="15+">15+ years</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="university">University (Alma Mater)</Label>
-          <Select
-            value={formData.university}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, university: value }))}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select university" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Stanford University">Stanford University</SelectItem>
-              <SelectItem value="Massachusetts Institute of Technology">MIT</SelectItem>
-              <SelectItem value="Harvard University">Harvard University</SelectItem>
-              <SelectItem value="University of California, Berkeley">UC Berkeley</SelectItem>
-              <SelectItem value="University of California, Los Angeles">UCLA</SelectItem>
-              <SelectItem value="University of California, San Diego">UC San Diego</SelectItem>
-              <SelectItem value="California Institute of Technology">Caltech</SelectItem>
-              <SelectItem value="University of Washington">University of Washington</SelectItem>
-              <SelectItem value="University of Texas at Austin">UT Austin</SelectItem>
-              <SelectItem value="Carnegie Mellon University">Carnegie Mellon</SelectItem>
-              <SelectItem value="Georgia Institute of Technology">Georgia Tech</SelectItem>
-              <SelectItem value="University of Illinois Urbana-Champaign">UIUC</SelectItem>
-              <SelectItem value="University of Michigan">University of Michigan</SelectItem>
-              <SelectItem value="Cornell University">Cornell University</SelectItem>
-              <SelectItem value="Princeton University">Princeton University</SelectItem>
-              <SelectItem value="Yale University">Yale University</SelectItem>
-              <SelectItem value="Columbia University">Columbia University</SelectItem>
-              <SelectItem value="University of Pennsylvania">UPenn</SelectItem>
-              <SelectItem value="Duke University">Duke University</SelectItem>
-              <SelectItem value="Northwestern University">Northwestern</SelectItem>
-              <SelectItem value="University of Southern California">USC</SelectItem>
-              <SelectItem value="New York University">NYU</SelectItem>
-              <SelectItem value="Boston University">Boston University</SelectItem>
-              <SelectItem value="University of Florida">University of Florida</SelectItem>
-              <SelectItem value="Arizona State University">Arizona State</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="graduationYear">Graduation Year</Label>
-          <Select
-            value={formData.graduationYear}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, graduationYear: value }))}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select year" />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 30 }, (_, i) => {
-                const year = new Date().getFullYear() - i
-                return (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                )
-              })}
             </SelectContent>
           </Select>
         </div>
@@ -251,56 +172,20 @@ export default function ProfessionalSignupForm() {
           id="linkedinUrl"
           value={formData.linkedinUrl}
           onChange={(e) => setFormData((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
-          placeholder="https://linkedin.com/in/johndoe"
+          placeholder="https://linkedin.com/in/janesmith"
           disabled={loading}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="skills">Skills & Expertise</Label>
-        <div className="flex gap-2">
-          <Input
-            value={currentSkill}
-            onChange={(e) => setCurrentSkill(e.target.value)}
-            placeholder="Add a skill"
-            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
-            disabled={loading}
-          />
-          <Button type="button" onClick={addSkill} size="icon" variant="outline" disabled={loading}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-        {skills.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {skills.map((skill, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-1 bg-secondary text-secondary-foreground px-2 py-1 rounded-md text-sm"
-              >
-                {skill}
-                <button
-                  type="button"
-                  onClick={() => removeSkill(skill)}
-                  className="hover:text-destructive"
-                  disabled={loading}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="bio">Professional Bio</Label>
+        <Label htmlFor="skills">Skills (comma-separated)</Label>
         <Textarea
-          id="bio"
-          value={formData.bio}
-          onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-          placeholder="Tell us about your professional background and interests..."
-          disabled={loading}
+          id="skills"
+          value={formData.skills}
+          onChange={(e) => setFormData((prev) => ({ ...prev, skills: e.target.value }))}
+          placeholder="JavaScript, React, Node.js, Python, Project Management"
           rows={3}
+          disabled={loading}
         />
       </div>
 

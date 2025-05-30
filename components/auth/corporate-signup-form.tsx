@@ -64,7 +64,7 @@ export default function CorporateSignupForm() {
             id="firstName"
             value={formData.firstName}
             onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-            placeholder="John"
+            placeholder="Alex"
             required
             disabled={loading}
           />
@@ -75,7 +75,7 @@ export default function CorporateSignupForm() {
             id="lastName"
             value={formData.lastName}
             onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
-            placeholder="Doe"
+            placeholder="Johnson"
             required
             disabled={loading}
           />
@@ -89,7 +89,7 @@ export default function CorporateSignupForm() {
           type="email"
           value={formData.email}
           onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="john.doe@company.com"
+          placeholder="alex.johnson@company.com"
           required
           disabled={loading}
         />
@@ -101,7 +101,7 @@ export default function CorporateSignupForm() {
           id="jobTitle"
           value={formData.jobTitle}
           onChange={(e) => setFormData((prev) => ({ ...prev, jobTitle: e.target.value }))}
-          placeholder="HR Manager, Talent Acquisition Lead, etc."
+          placeholder="HR Manager / Talent Acquisition"
           required
           disabled={loading}
         />
@@ -113,7 +113,7 @@ export default function CorporateSignupForm() {
           id="companyName"
           value={formData.companyName}
           onChange={(e) => setFormData((prev) => ({ ...prev, companyName: e.target.value }))}
-          placeholder="Tech Corp Inc."
+          placeholder="Tech Innovations Inc."
           required
           disabled={loading}
         />
@@ -136,8 +136,7 @@ export default function CorporateSignupForm() {
               <SelectItem value="51-200">51-200 employees</SelectItem>
               <SelectItem value="201-500">201-500 employees</SelectItem>
               <SelectItem value="501-1000">501-1000 employees</SelectItem>
-              <SelectItem value="1001-5000">1001-5000 employees</SelectItem>
-              <SelectItem value="5000+">5000+ employees</SelectItem>
+              <SelectItem value="1000+">1000+ employees</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -153,38 +152,31 @@ export default function CorporateSignupForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Technology">Technology</SelectItem>
-              <SelectItem value="Finance">Finance & Banking</SelectItem>
+              <SelectItem value="Finance">Finance</SelectItem>
               <SelectItem value="Healthcare">Healthcare</SelectItem>
               <SelectItem value="Education">Education</SelectItem>
-              <SelectItem value="Consulting">Consulting</SelectItem>
               <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+              <SelectItem value="Consulting">Consulting</SelectItem>
               <SelectItem value="Retail">Retail</SelectItem>
-              <SelectItem value="Media">Media & Entertainment</SelectItem>
-              <SelectItem value="Automotive">Automotive</SelectItem>
-              <SelectItem value="Energy">Energy</SelectItem>
-              <SelectItem value="Real Estate">Real Estate</SelectItem>
-              <SelectItem value="Government">Government</SelectItem>
-              <SelectItem value="Non-profit">Non-profit</SelectItem>
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="companyWebsite">Company Website</Label>
-        <Input
-          id="companyWebsite"
-          value={formData.companyWebsite}
-          onChange={(e) => setFormData((prev) => ({ ...prev, companyWebsite: e.target.value }))}
-          placeholder="https://www.company.com"
-          disabled={loading}
-        />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="headquarters">Headquarters Location</Label>
+          <Label htmlFor="companyWebsite">Company Website</Label>
+          <Input
+            id="companyWebsite"
+            value={formData.companyWebsite}
+            onChange={(e) => setFormData((prev) => ({ ...prev, companyWebsite: e.target.value }))}
+            placeholder="https://company.com"
+            disabled={loading}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="headquarters">Headquarters</Label>
           <Input
             id="headquarters"
             value={formData.headquarters}
@@ -192,28 +184,6 @@ export default function CorporateSignupForm() {
             placeholder="San Francisco, CA"
             disabled={loading}
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="foundedYear">Founded Year</Label>
-          <Select
-            value={formData.foundedYear}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, foundedYear: value }))}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select year" />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 50 }, (_, i) => {
-                const year = new Date().getFullYear() - i
-                return (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -224,8 +194,8 @@ export default function CorporateSignupForm() {
           value={formData.companyDescription}
           onChange={(e) => setFormData((prev) => ({ ...prev, companyDescription: e.target.value }))}
           placeholder="Brief description of your company and what you do..."
-          disabled={loading}
           rows={3}
+          disabled={loading}
         />
       </div>
 
@@ -256,7 +226,7 @@ export default function CorporateSignupForm() {
 
       <Button
         type="submit"
-        className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
+        className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
         disabled={loading}
         size="lg"
       >

@@ -122,8 +122,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Effect for handling redirection based on profile completion and user type
   useEffect(() => {
+    // Only proceed if we're not loading and auth has been checked
     if (loading || !authChecked) return
+
+    // If user is not authenticated, don't redirect
     if (!user) return
+
+    // If we don't have profile data yet, wait for it
     if (!profile) return
 
     console.log("Auth redirect check:", {
@@ -150,6 +155,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const dashboardPath = getDashboardPath(profile.user_type || "student")
       console.log("Redirecting authenticated user to dashboard:", dashboardPath)
       router.push(dashboardPath)
+    }
+    // ADDED: Add redirection to handle the case where someone accesses the wrong dashboard
+    else if (profile.is_profile_complete && profile.user_type) {
+      const correctDashboardPath = getDashboardPath(profile.user_type)
+
+      // Check if the user is on the wrong dashboard
+      if (
+        (profile.user_type === "student" &&
+          (pathname.startsWith("/professional") || pathname.startsWith("/corporate"))) ||
+        (profile.user_type === "professional" && (pathname === "/" || pathname.startsWith("/corporate"))) ||
+        (profile.user_type === "corporate" && (pathname === "/" || pathname.startsWith("/professional")))
+      ) {
+        console.log(`Redirecting ${profile.user_type} from wrong dashboard to: ${correctDashboardPath}`)
+        router.push(correctDashboardPath)
+      }
     }
   }, [user, profile, loading, authChecked, pathname, router, getDashboardPath])
 
