@@ -14,22 +14,25 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea" // Added Textarea import
 import { useState } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { createPost } from "@/lib/actions"
 import { useAuth } from "@/context/AuthContext"
+import { Loader2 } from "lucide-react" // Added Loader2 for loading state
 
 export function CreatePostDialog() {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
+  const [isLoading, setIsLoading] = useState(false) // Added loading state
   const { toast } = useToast()
   const { user } = useAuth()
 
   const handleSubmit = async () => {
-    if (!title || !content) {
+    if (!title.trim() || !content.trim()) {
       toast({
         title: "Error",
-        description: "Please fill in all fields.",
+        description: "Please fill in both title and content.",
         variant: "destructive",
       })
       return
@@ -44,25 +47,29 @@ export function CreatePostDialog() {
       return
     }
 
+    setIsLoading(true)
     const res = await createPost({
-      title,
-      content,
+      title: title.trim(),
+      content: content.trim(),
       authorId: user.id,
     })
+    setIsLoading(false)
 
     if (res?.error) {
       toast({
-        title: "Error",
+        title: "Error Creating Post",
         description: res.error,
         variant: "destructive",
       })
     } else {
       toast({
-        title: "Success",
-        description: "Post created successfully!",
+        title: "Success!",
+        description: "Post created successfully.",
       })
       setTitle("")
       setContent("")
+      // Optionally, close the dialog here if it's controlled by an open/onOpenChange prop
+      // For AlertDialog, it typically closes on AlertDialogAction unless prevented.
     }
   }
 
@@ -74,25 +81,45 @@ export function CreatePostDialog() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Create a new post</AlertDialogTitle>
-          <AlertDialogDescription>Write something interesting to share with the world.</AlertDialogDescription>
+          <AlertDialogDescription>
+            Share your thoughts, experiences, or updates with your campus community.
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="title" className="text-right">
-              Title
-            </Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="col-span-3" />
+          <div className="grid gap-2">
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Your amazing post title"
+              disabled={isLoading}
+            />
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="content" className="text-right">
-              Content
-            </Label>
-            <Input id="content" value={content} onChange={(e) => setContent(e.target.value)} className="col-span-3" />
+          <div className="grid gap-2">
+            <Label htmlFor="content">Content</Label>
+            <Textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="What's on your mind? 💭"
+              className="min-h-[120px]"
+              disabled={isLoading}
+            />
           </div>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleSubmit}>Continue</AlertDialogAction>
+          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleSubmit} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Posting...
+              </>
+            ) : (
+              "Post"
+            )}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

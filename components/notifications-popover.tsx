@@ -4,8 +4,8 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Button } from "@/components/ui/button" // Keep for "Mark all as read"
-import { useAuth } from "@/context/AuthContext"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext" // Corrected import path
 import { supabase } from "@/lib/supabase/client"
 import { formatDistanceToNow } from "date-fns"
 import { Loader2 } from "lucide-react"
@@ -35,7 +35,7 @@ export function NotificationsPopover({ open, onOpenChange, children }: Notificat
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(20) // Increased limit slightly
+        .limit(20)
 
       if (error) {
         console.error("Error fetching notifications:", error)
@@ -49,7 +49,7 @@ export function NotificationsPopover({ open, onOpenChange, children }: Notificat
     fetchNotifications()
 
     const subscription = supabase
-      .channel(`notifications-${user.id}`) // User-specific channel
+      .channel(`notifications-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -59,12 +59,10 @@ export function NotificationsPopover({ open, onOpenChange, children }: Notificat
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications((prev) => [payload.new as any, ...prev].slice(0, 20)) // Keep list size manageable
-          // Potentially update badge count here or via a separate mechanism
+          setNotifications((prev) => [payload.new as any, ...prev].slice(0, 20))
         },
       )
       .on(
-        // Also listen for updates (e.g., read status changed elsewhere)
         "postgres_changes",
         {
           event: "UPDATE",
@@ -85,26 +83,21 @@ export function NotificationsPopover({ open, onOpenChange, children }: Notificat
 
   const markAsRead = async (notificationId: string) => {
     if (!user) return
-    // Optimistically update UI
     setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)))
     try {
       await supabase.from("notifications").update({ read: true }).eq("id", notificationId).eq("user_id", user.id)
     } catch (error) {
       console.error("Error marking notification as read:", error)
-      // Revert optimistic update if error (optional)
     }
   }
 
   const markAllAsRead = async () => {
     if (!user || notifications.filter((n) => !n.read).length === 0) return
-
-    // Optimistically update UI
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     try {
       await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false)
     } catch (error) {
       console.error("Error marking all notifications as read:", error)
-      // Revert optimistic update if error (optional)
     }
   }
 
