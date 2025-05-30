@@ -17,6 +17,15 @@ export interface Database {
           created_at: string
           updated_at: string
           is_profile_complete: boolean
+          user_type: string
+          company_name: string | null
+          company_size: string | null
+          industry: string | null
+          job_title: string | null
+          years_experience: number | null
+          company_website: string | null
+          linkedin_url: string | null
+          skills: string[] | null
         }
         Insert: {
           id: string
@@ -31,6 +40,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
           is_profile_complete?: boolean
+          user_type?: string
+          company_name?: string | null
+          company_size?: string | null
+          industry?: string | null
+          job_title?: string | null
+          years_experience?: number | null
+          company_website?: string | null
+          linkedin_url?: string | null
+          skills?: string[] | null
         }
         Update: {
           id?: string
@@ -45,6 +63,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
           is_profile_complete?: boolean
+          user_type?: string
+          company_name?: string | null
+          company_size?: string | null
+          industry?: string | null
+          job_title?: string | null
+          years_experience?: number | null
+          company_website?: string | null
+          linkedin_url?: string | null
+          skills?: string[] | null
         }
       }
       posts: {
@@ -349,6 +376,191 @@ export interface Database {
           updated_at?: string
         }
       }
+      companies: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          industry: string | null
+          size: string | null
+          website: string | null
+          logo_url: string | null
+          headquarters: string | null
+          founded_year: number | null
+          verified: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          industry?: string | null
+          size?: string | null
+          website?: string | null
+          logo_url?: string | null
+          headquarters?: string | null
+          founded_year?: number | null
+          verified?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          industry?: string | null
+          size?: string | null
+          website?: string | null
+          logo_url?: string | null
+          headquarters?: string | null
+          founded_year?: number | null
+          verified?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      job_postings: {
+        Row: {
+          id: string
+          company_id: string | null
+          posted_by: string | null
+          title: string
+          description: string
+          requirements: string[] | null
+          location: string | null
+          job_type: string | null
+          salary_range: string | null
+          experience_level: string | null
+          skills_required: string[] | null
+          application_deadline: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id?: string | null
+          posted_by?: string | null
+          title: string
+          description: string
+          requirements?: string[] | null
+          location?: string | null
+          job_type?: string | null
+          salary_range?: string | null
+          experience_level?: string | null
+          skills_required?: string[] | null
+          application_deadline?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string | null
+          posted_by?: string | null
+          title?: string
+          description?: string
+          requirements?: string[] | null
+          location?: string | null
+          job_type?: string | null
+          salary_range?: string | null
+          experience_level?: string | null
+          skills_required?: string[] | null
+          application_deadline?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      internship_programs: {
+        Row: {
+          id: string
+          company_id: string | null
+          posted_by: string | null
+          title: string
+          description: string
+          duration: string | null
+          location: string | null
+          stipend: string | null
+          requirements: string[] | null
+          skills_required: string[] | null
+          application_deadline: string | null
+          start_date: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id?: string | null
+          posted_by?: string | null
+          title: string
+          description: string
+          duration?: string | null
+          location?: string | null
+          stipend?: string | null
+          requirements?: string[] | null
+          skills_required?: string[] | null
+          application_deadline?: string | null
+          start_date?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string | null
+          posted_by?: string | null
+          title?: string
+          description?: string
+          duration?: string | null
+          location?: string | null
+          stipend?: string | null
+          requirements?: string[] | null
+          skills_required?: string[] | null
+          application_deadline?: string | null
+          start_date?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      applications: {
+        Row: {
+          id: string
+          user_id: string | null
+          job_posting_id: string | null
+          internship_id: string | null
+          status: string
+          cover_letter: string | null
+          resume_url: string | null
+          applied_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          job_posting_id?: string | null
+          internship_id?: string | null
+          status?: string
+          cover_letter?: string | null
+          resume_url?: string | null
+          applied_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          job_posting_id?: string | null
+          internship_id?: string | null
+          status?: string
+          cover_letter?: string | null
+          resume_url?: string | null
+          applied_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -387,6 +599,15 @@ export interface Profile {
   created_at: string
   updated_at: string
   is_profile_complete: boolean
+  user_type: string
+  company_name?: string | null
+  company_size?: string | null
+  industry?: string | null
+  job_title?: string | null
+  years_experience?: number | null
+  company_website?: string | null
+  linkedin_url?: string | null
+  skills?: string[] | null
 }
 
 export interface Event {
@@ -417,6 +638,57 @@ export interface Content {
   is_public: boolean
   view_count: number
   like_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Company {
+  id: string
+  name: string
+  description?: string | null
+  industry?: string | null
+  size?: string | null
+  website?: string | null
+  logo_url?: string | null
+  headquarters?: string | null
+  founded_year?: number | null
+  verified: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface JobPosting {
+  id: string
+  company_id?: string | null
+  posted_by?: string | null
+  title: string
+  description: string
+  requirements?: string[] | null
+  location?: string | null
+  job_type?: string | null
+  salary_range?: string | null
+  experience_level?: string | null
+  skills_required?: string[] | null
+  application_deadline?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface InternshipProgram {
+  id: string
+  company_id?: string | null
+  posted_by?: string | null
+  title: string
+  description: string
+  duration?: string | null
+  location?: string | null
+  stipend?: string | null
+  requirements?: string[] | null
+  skills_required?: string[] | null
+  application_deadline?: string | null
+  start_date?: string | null
+  is_active: boolean
   created_at: string
   updated_at: string
 }

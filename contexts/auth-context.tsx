@@ -55,6 +55,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null
   }, [user?.id, fetchProfile])
 
+  const getDashboardPath = useCallback((userType: string) => {
+    switch (userType) {
+      case "student":
+        return "/"
+      case "professional":
+        return "/professional/dashboard"
+      case "corporate":
+        return "/corporate/dashboard"
+      default:
+        return "/"
+    }
+  }, [])
+
   useEffect(() => {
     const fetchUserAndProfile = async () => {
       try {
@@ -107,20 +120,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [fetchProfile])
 
-  // Effect for handling redirection based on profile completion
+  // Effect for handling redirection based on profile completion and user type
   useEffect(() => {
-    // Only proceed if we're not loading and auth has been checked
     if (loading || !authChecked) return
-
-    // If user is not authenticated, don't redirect
     if (!user) return
-
-    // If we don't have profile data yet, wait for it
     if (!profile) return
 
     console.log("Auth redirect check:", {
       user: !!user,
       profile: !!profile,
+      userType: profile?.user_type,
       isProfileComplete: profile?.is_profile_complete,
       currentPath: pathname,
     })
@@ -130,24 +139,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Redirecting to profile completion")
       router.push(profileCompletionPath)
     }
-    // If profile is complete and user is on profile completion path, redirect to dashboard
+    // If profile is complete and user is on profile completion path, redirect to appropriate dashboard
     else if (profile.is_profile_complete && pathname === profileCompletionPath) {
-      console.log("Redirecting to dashboard")
-      router.push("/")
+      const dashboardPath = getDashboardPath(profile.user_type || "student")
+      console.log("Redirecting to dashboard:", dashboardPath)
+      router.push(dashboardPath)
     }
-    // If profile is complete and user is on login/signup, redirect to dashboard
+    // If profile is complete and user is on login/signup, redirect to appropriate dashboard
     else if (profile.is_profile_complete && publicPaths.includes(pathname)) {
-      console.log("Redirecting authenticated user to dashboard")
-      router.push("/")
+      const dashboardPath = getDashboardPath(profile.user_type || "student")
+      console.log("Redirecting authenticated user to dashboard:", dashboardPath)
+      router.push(dashboardPath)
     }
-  }, [user, profile, loading, authChecked, pathname, router])
+  }, [user, profile, loading, authChecked, pathname, router, getDashboardPath])
 
   const signIn = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
 
-      // Don't manually redirect here - let the useEffect handle it after profile is fetched
       console.log("Sign in successful, waiting for profile fetch and redirect")
     } catch (error) {
       console.error("Sign in error:", error)
@@ -166,9 +176,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             lastName: userData.lastName,
             username: email.split("@")[0],
             full_name: `${userData.firstName} ${userData.lastName}`,
+            user_type: userData.userType,
             major: userData.major,
             graduationYear: userData.graduationYear,
             university: userData.university,
+            job_title: userData.jobTitle,
+            company_name: userData.companyName || userData.company,
+            company_size: userData.companySize,
+            industry: userData.industry,
+            years_experience: userData.yearsExperience,
+            company_website: userData.companyWebsite,
+            linkedin_url: userData.linkedinUrl,
+            skills: userData.skills,
             is_profile_complete: false,
           },
         },

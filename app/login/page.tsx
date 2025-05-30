@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("student")
   const { signIn } = useAuth()
   const { toast } = useToast()
 
@@ -40,43 +42,79 @@ export default function LoginPage() {
     }
   }
 
+  const getTabContent = (userType: string, icon: React.ReactNode, title: string, description: string) => (
+    <div className="text-center mb-6">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
+        {icon}
+      </div>
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/20"></div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/5"></div>
       <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/95">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-6 w-6 text-white"
-            >
-              <path d="M17 11h1a3 3 0 0 1 0 6h-1" />
-              <path d="M9 12v6" />
-              <path d="M13 12v6" />
-              <path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5s2-.5 3-.5 2 .5 3 .5 1.44-.5 3-.5a2.5 2.5 0 0 1 0 5c-1.56 0-2-.5-3-.5Z" />
-            </svg>
-          </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Welcome back! ✨
+            Welcome Back! ✨
           </CardTitle>
           <CardDescription>Sign in to your CampusConnect account</CardDescription>
         </CardHeader>
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
+
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
+              <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
+                <GraduationCap className="h-3 w-3" />
+                Student
+              </TabsTrigger>
+              <TabsTrigger value="professional" className="flex items-center gap-1 text-xs">
+                <Briefcase className="h-3 w-3" />
+                Professional
+              </TabsTrigger>
+              <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
+                <Building2 className="h-3 w-3" />
+                Corporate
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="student">
+              {getTabContent(
+                "student",
+                <GraduationCap className="h-6 w-6 text-white" />,
+                "Student Login",
+                "Access your campus network",
+              )}
+            </TabsContent>
+
+            <TabsContent value="professional">
+              {getTabContent(
+                "professional",
+                <Briefcase className="h-6 w-6 text-white" />,
+                "Professional Login",
+                "Connect and mentor students",
+              )}
+            </TabsContent>
+
+            <TabsContent value="corporate">
+              {getTabContent(
+                "corporate",
+                <Building2 className="h-6 w-6 text-white" />,
+                "Corporate Login",
+                "Find talent and post opportunities",
+              )}
+            </TabsContent>
+          </Tabs>
+
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your.email@university.edu"
+                placeholder="your.email@domain.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -118,8 +156,7 @@ export default function LoginPage() {
                 Forgot password?
               </Link>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
+
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
@@ -134,14 +171,17 @@ export default function LoginPage() {
                 "Sign In 🚀"
               )}
             </Button>
-            <div className="text-center text-sm">
-              {"Don't have an account? "}
-              <Link href="/signup" className="text-blue-600 hover:underline font-medium">
-                Sign up here! 🎓
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
+          </form>
+        </CardContent>
+
+        <CardFooter className="text-center">
+          <div className="text-sm w-full">
+            {"Don't have an account? "}
+            <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+              Sign up here! 🎓
+            </Link>
+          </div>
+        </CardFooter>
       </Card>
     </div>
   )

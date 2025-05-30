@@ -1,218 +1,83 @@
 "use client"
-
-import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { EyeIcon, EyeOffIcon, Loader2 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/components/ui/use-toast"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Building2, GraduationCap, Briefcase } from "lucide-react"
+import StudentSignupForm from "@/components/auth/student-signup-form"
+import ProfessionalSignupForm from "@/components/auth/professional-signup-form"
+import CorporateSignupForm from "@/components/auth/corporate-signup-form"
 
 export default function SignupPage() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    university: "",
-    major: "",
-    graduationYear: "",
-  })
-  const { signUp } = useAuth()
-  const { toast } = useToast()
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    try {
-      await signUp(formData.email, formData.password, formData)
-      toast({
-        title: "Welcome to CampusConnect! 🎉",
-        description: "Your account has been created successfully.",
-      })
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create account",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [activeTab, setActiveTab] = useState("student")
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-400 via-blue-500 to-purple-600 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/20"></div>
-      <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/95">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/5"></div>
+      <Card className="w-full max-w-2xl relative z-10 backdrop-blur-sm bg-background/95">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-green-500 to-blue-600">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-6 w-6 text-white"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="m19 8 2 2-2 2" />
-              <path d="m17 10 2 2-2 2" />
-            </svg>
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
+            <GraduationCap className="h-8 w-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-            Join CampusConnect! 🎓
+          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Join CampusConnect
           </CardTitle>
-          <CardDescription>Create your student account and connect with peers</CardDescription>
+          <CardDescription className="text-lg">
+            Connect students, professionals, and companies in one platform
+          </CardDescription>
         </CardHeader>
-        <form onSubmit={handleSignup}>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  value={formData.firstName}
-                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                  required
-                  disabled={loading}
-                />
+
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-8">
+              <TabsTrigger value="student" className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4" />
+                Student
+              </TabsTrigger>
+              <TabsTrigger value="professional" className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4" />
+                Professional
+              </TabsTrigger>
+              <TabsTrigger value="corporate" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Corporate
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="student">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-semibold text-blue-600">Student Registration</h3>
+                <p className="text-muted-foreground">Connect with peers, find internships, and build your career</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  placeholder="Doe"
-                  value={formData.lastName}
-                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  required
-                  disabled={loading}
-                />
+              <StudentSignupForm />
+            </TabsContent>
+
+            <TabsContent value="professional">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-semibold text-green-600">Professional Registration</h3>
+                <p className="text-muted-foreground">Share expertise, mentor students, and expand your network</p>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">University Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="john.doe@university.edu"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="university">University</Label>
-              <Select onValueChange={(value) => setFormData({ ...formData, university: value })} disabled={loading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your university" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="stanford">Stanford University</SelectItem>
-                  <SelectItem value="mit">MIT</SelectItem>
-                  <SelectItem value="harvard">Harvard University</SelectItem>
-                  <SelectItem value="berkeley">UC Berkeley</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="major">Major</Label>
-                <Select onValueChange={(value) => setFormData({ ...formData, major: value })} disabled={loading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Major" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cs">Computer Science</SelectItem>
-                    <SelectItem value="business">Business</SelectItem>
-                    <SelectItem value="engineering">Engineering</SelectItem>
-                    <SelectItem value="psychology">Psychology</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+              <ProfessionalSignupForm />
+            </TabsContent>
+
+            <TabsContent value="corporate">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-semibold text-purple-600">Corporate Registration</h3>
+                <p className="text-muted-foreground">Find talent, post opportunities, and build your employer brand</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="year">Graduation Year</Label>
-                <Select
-                  onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}
-                  disabled={loading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2026">2026</SelectItem>
-                    <SelectItem value="2027">2027</SelectItem>
-                    <SelectItem value="2028">2028</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Create a strong password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                  disabled={loading}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
-                >
-                  {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Create Account ✨"
-              )}
-            </Button>
-            <div className="text-center text-sm">
+              <CorporateSignupForm />
+            </TabsContent>
+          </Tabs>
+
+          <div className="text-center mt-6">
+            <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link href="/login" className="text-blue-600 hover:underline font-medium">
-                Sign in here! 👋
+                Sign in here
               </Link>
-            </div>
-          </CardFooter>
-        </form>
+            </p>
+          </div>
+        </CardContent>
       </Card>
     </div>
   )
