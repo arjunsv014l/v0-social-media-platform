@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, LogOut } from "lucide-react"
+import { Home, LogOut, UserCircle, SettingsIcon } from "lucide-react"
 import { useMemo } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
@@ -23,23 +23,7 @@ interface NavItem {
   label: string
   href: string
   icon: React.ComponentType<any>
-  userTypes: string[]
 }
-
-const allNavigationItems: NavItem[] = [
-  {
-    label: "Home Feed",
-    href: "/",
-    icon: Home,
-    userTypes: ["student", "university", "corporate", "professional"],
-  },
-  {
-    label: "My Dashboard",
-    href: "/dashboard",
-    icon: Home,
-    userTypes: ["student", "university", "corporate", "professional"],
-  },
-]
 
 interface AppSidebarProps {
   className?: string
@@ -68,9 +52,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     if (!profile) return "/"
     switch (profile.user_type) {
       case "student":
-        return "/" // Student main feed
-      case "professional":
-        return "/professional/dashboard"
+        return "/" // Student main feed is their dashboard
       case "corporate":
         return "/corporate/dashboard"
       case "university":
@@ -82,20 +64,19 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
   const dashboardPath = getDashboardPathForUser()
 
-  const filteredNavigationItems = useMemo(() => {
+  const navigationItems = useMemo((): NavItem[] => {
     if (!profile) return []
 
-    const items: NavItem[] = [
+    const baseNavItems: NavItem[] = [
       {
         label: "My Dashboard",
         href: dashboardPath,
         icon: Home,
-        userTypes: [profile.user_type],
       },
     ]
 
-    return items
-  }, [profile])
+    return baseNavItems
+  }, [profile, dashboardPath])
 
   if (authLoading) {
     return (
@@ -107,7 +88,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-2">
-            {[...Array(4)].map((_, i) => (
+            {[...Array(3)].map((_, i) => (
               <Skeleton key={i} className="h-10 w-full rounded-md" />
             ))}
           </div>
@@ -134,15 +115,15 @@ export function AppSidebar({ className }: AppSidebarProps) {
       <div className="flex h-16 shrink-0 items-center border-b px-6">
         <Link href={dashboardPath} className="flex items-center gap-2 font-semibold">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={profile?.avatar_url || ""} alt={profile?.full_name || "User"} />
-            <AvatarFallback>{profile?.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name || "User"} />
+            <AvatarFallback>{profile.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
           </Avatar>
           <span className="truncate">{sidebarTitle}</span>
         </Link>
       </div>
       <nav className="flex-1 overflow-y-auto p-4">
         <div className="space-y-1">
-          {filteredNavigationItems.map((item) => (
+          {navigationItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -176,18 +157,24 @@ export function AppSidebar({ className }: AppSidebarProps) {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => router.push("/profile")} className="cursor-pointer">
+                <UserCircle className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => router.push("/settings")} className="cursor-pointer">
+                <SettingsIcon className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
-                  signOut()
-                  router.push("/login")
+                  if (typeof signOut === "function") {
+                    signOut()
+                    router.push("/login")
+                  } else {
+                    console.error("SignOut function is not available on AuthContext")
+                  }
                 }}
-                className="cursor-pointer text-red-600 hover:!text-red-600 hover:!bg-red-50 dark:hover:!bg-red-700/20 dark:text-red-500 dark:hover:!text-red-500"
+                className="cursor-pointer text-red-600 hover:!text-red-600 focus:!text-red-600 hover:!bg-red-50 focus:!bg-red-50 dark:hover:!bg-red-900/50 dark:focus:!bg-red-900/50 dark:text-red-500 dark:hover:!text-red-500 dark:focus:!text-red-500"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
