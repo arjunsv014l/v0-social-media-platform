@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, LogOut, UserCircle, SettingsIcon } from "lucide-react"
+import { Home, LogOut, UserCircle, SettingsIcon, BookOpen, MessageSquare, Bell } from "lucide-react" // Added more icons
 import { useMemo } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
@@ -52,7 +52,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     if (!profile) return "/"
     switch (profile.user_type) {
       case "student":
-        return "/" // Student main feed is their dashboard
+        return "/student/dashboard" // Updated for student dashboard
       case "corporate":
         return "/corporate/dashboard"
       case "university":
@@ -75,6 +75,29 @@ export function AppSidebar({ className }: AppSidebarProps) {
       },
     ]
 
+    // Add student-specific navigation items if the user is a student
+    // and they are on their student dashboard or related student pages
+    if (profile.user_type === "student") {
+      baseNavItems.push(
+        {
+          label: "Courses",
+          href: "/courses", // Assuming a general courses page
+          icon: BookOpen,
+        },
+        {
+          label: "Messages",
+          href: "/messages", // Assuming a general messages page
+          icon: MessageSquare,
+        },
+        {
+          label: "Notifications",
+          href: "/notifications", // Assuming a general notifications page
+          icon: Bell,
+        },
+      )
+    }
+    // You can add more role-specific items here for university/corporate users if needed
+
     return baseNavItems
   }, [profile, dashboardPath])
 
@@ -88,9 +111,14 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-2">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-md" />
-            ))}
+            {[...Array(5)].map(
+              (
+                _,
+                i, // Increased skeleton items to match potential nav items
+              ) => (
+                <Skeleton key={i} className="h-10 w-full rounded-md" />
+              ),
+            )}
           </div>
         </div>
         <div className="mt-auto border-t p-4">
@@ -107,7 +135,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
   }
 
   if (!profile && !authLoading) {
-    return null
+    // Optionally, you could redirect to login or show a minimal sidebar
+    return null // Or a more specific placeholder if not logged in
   }
 
   return (
@@ -115,8 +144,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
       <div className="flex h-16 shrink-0 items-center border-b px-6">
         <Link href={dashboardPath} className="flex items-center gap-2 font-semibold">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name || "User"} />
-            <AvatarFallback>{profile.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            <AvatarImage src={profile?.avatar_url || ""} alt={profile?.full_name || "User"} />
+            <AvatarFallback>{profile?.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
           </Avatar>
           <span className="truncate">{sidebarTitle}</span>
         </Link>
