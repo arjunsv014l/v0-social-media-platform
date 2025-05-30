@@ -8,7 +8,7 @@ import NewPostCard from "@/components/new-post-card"
 import PostCard from "@/components/post-card"
 import TrendingSidebar from "@/components/trending-sidebar"
 import { useAuth } from "@/contexts/auth-context"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase/client"
 import type { PostWithAuthor } from "@/lib/supabase/types"
 
@@ -25,58 +25,108 @@ export default function Home() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
 
-  useEffect(() => {
-    const fetchPosts = async () => {
-      setLoadingPosts(true)
-      const { data, error } = await supabase
-        .from("posts")
-        .select(`*, author:profiles!user_id(*)`)
-        .order("created_at", { ascending: false })
-        .limit(20)
+  // Refs to prevent infinite operations
+  const mountedRef = useRef(true)
+  const subscriptionRef = useRef<any>(null)
 
-      if (error) {
-        console.error("Error fetching posts:", error)
-        setPosts([])
-      } else {
-        setPosts((data as PostWithAuthor[]) || [])
+  useEffect(() => {
+    mountedRef.current = true
+
+    const fetchPosts = async () => {
+      if (!mountedRef.current) return
+
+      setLoadingPosts(true)
+      try {
+        const { data, error } = await supabase
+          .from("posts")
+          .select(`*, author:profiles!user_id(*)`)
+          .order("created_at", { ascending: false })
+          .limit(20)
+
+        if (error) {
+          console.error("Error fetching posts:", error)
+          if (mountedRef.current) {
+            setPosts([])
+          }
+        } else if (mountedRef.current) {
+          setPosts((data as PostWithAuthor[]) || [])
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching posts:", error)
+      } finally {
+        if (mountedRef.current) {
+          setLoadingPosts(false)
+        }
       }
-      setLoadingPosts(false)
     }
 
-    // Only fetch posts if we have a user or if we're not loading auth
+    // Only fetch posts if we're not loading auth
     if (!loading) {
       fetchPosts()
-    }
 
-    const postChannel = supabase
-      .channel("realtime-posts-home")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
-        const fetchNewPost = async () => {
-          const { data: newPostData, error: newPostError } = await supabase
-            .from("posts")
-            .select(`*, author:profiles!user_id(*)`)
-            .eq("id", payload.new.id)
-            .single()
-          if (newPostError) {
-            console.error("Error fetching new post:", newPostError)
-          } else if (newPostData) {
-            setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
+      // Set up real-time subscription with debouncing
+      let debounceTimeout: NodeJS.Timeout
+
+      const handleNewPost = (payload: any) => {
+        clearTimeout(debounceTimeout)
+        debounceTimeout = setTimeout(async () => {
+          if (!mountedRef.current) return
+
+          try {
+            const { data: newPostData, error: newPostError } = await supabase
+              .from("posts")
+              .select(`*, author:profiles!user_id(*)`)
+              .eq("id", payload.new.id)
+              .single()
+
+            if (newPostError) {
+              console.error("Error fetching new post:", newPostError)
+            } else if (newPostData && mountedRef.current) {
+              setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
+            }
+          } catch (error) {
+            console.error("Error handling new post:", error)
           }
+        }, 500) // 500ms debounce
+      }
+
+      subscriptionRef.current = supabase
+        .channel("realtime-posts-home")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, handleNewPost)
+        .subscribe()
+
+      return () => {
+        clearTimeout(debounceTimeout)
+        if (subscriptionRef.current) {
+          supabase.removeChannel(subscriptionRef.current)
+          subscriptionRef.current = null
         }
-        fetchNewPost()
-      })
-      .subscribe()
+      }
+    }
 
     return () => {
-      supabase.removeChannel(postChannel)
+      mountedRef.current = false
     }
   }, [loading])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current)
+      }
+    }
+  }, [])
 
   // Show loading only during initial auth check
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     )
   }
@@ -167,7 +217,10 @@ export default function Home() {
             {user && <NewPostCard />}
             {loadingPosts ? (
               <div className="flex justify-center items-center py-10">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Loading posts...</p>
+                </div>
               </div>
             ) : posts.length > 0 ? (
               <div className="space-y-4">
