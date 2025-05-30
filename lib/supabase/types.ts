@@ -7,7 +7,6 @@ export interface Profile {
   username?: string
   full_name?: string
   avatar_url?: string
-  // website?: string // This line is now removed
   user_type?: "student" | "professional" | "corporate" | "university"
   is_profile_complete?: boolean // Should be BOOLEAN in DB
 
