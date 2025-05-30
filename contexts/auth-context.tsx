@@ -5,37 +5,37 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { usePathname, useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase/client"
-import type { Profile } from "@/lib/supabase/types" // Ensure Profile type is imported
+import type { Profile } from "@/lib/supabase/types"
 
 interface AuthContextType {
   user: User | null
-  profile: Profile | null // Use the Profile type
+  profile: Profile | null
   loading: boolean
-  authChecked: boolean // To know when initial auth check is done
+  authChecked: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, userData: any) => Promise<void>
   signOut: () => Promise<void>
-  refreshProfile: () => Promise<void> // Added to refresh profile data
+  refreshProfile: () => Promise<void>
+  updateProfile: (updates: Partial<Profile>) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Define paths that don't require profile completion
 const publicPaths = ["/login", "/signup"]
-const profileCompletionPath = "/settings" // Assuming /settings?tab=profile is the target
+const profileCompletionPath = "/profile/complete"
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [authChecked, setAuthChecked] = useState(false) // New state
+  const [authChecked, setAuthChecked] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
     if (error && error.code !== "PGRST116") {
-      // PGRST116: "The result contains 0 rows"
       console.error("Error fetching profile:", error)
       return null
     }
@@ -48,6 +48,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(updatedProfile)
     }
   }, [user?.id, fetchProfile])
+
+  const updateProfile = useCallback(
+    async (updates: Partial<Profile>) => {
+      if (!user?.id) return
+
+      // Optimistically update local state
+      setProfile((prev) => (prev ? { ...prev, ...updates } : null))
+
+      try {
+        const { error } = await supabase.from("profiles").update(updates).eq("id", user.id)
+
+        if (error) throw error
+
+        // Refresh to ensure we have the latest data
+        await refreshProfile()
+      } catch (error) {
+        console.error("Error updating profile:", error)
+        // Revert optimistic update on error
+        await refreshProfile()
+        throw error
+      }
+    },
+    [user?.id, refreshProfile],
+  )
 
   useEffect(() => {
     const fetchUserAndProfile = async () => {
@@ -65,17 +89,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null)
       }
       setLoading(false)
-      setAuthChecked(true) // Mark initial check as complete
+      setAuthChecked(true)
     }
 
     fetchUserAndProfile()
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       setLoading(true)
       const activeUser = session?.user ?? null
       setUser(activeUser)
+
       if (activeUser) {
         const userProfile = await fetchProfile(activeUser.id)
         setProfile(userProfile)
@@ -83,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null)
       }
       setLoading(false)
-      setAuthChecked(true) // Also mark as complete on auth state change
+      setAuthChecked(true)
     })
 
     return () => subscription.unsubscribe()
@@ -92,8 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Effect for handling redirection based on profile completion
   useEffect(() => {
     if (!loading && authChecked && user && profile) {
+      // If profile is incomplete and user is not on profile completion page or public pages
       if (!profile.is_profile_complete && pathname !== profileCompletionPath && !publicPaths.includes(pathname)) {
-        router.push(`${profileCompletionPath}?tab=profile&notice=complete-profile`)
+        router.push(profileCompletionPath)
+      }
+      // If profile is complete and user is on profile completion page, redirect to dashboard
+      else if (profile.is_profile_complete && pathname === profileCompletionPath) {
+        router.push("/")
       }
     }
   }, [user, profile, loading, authChecked, pathname, router])
@@ -101,8 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    // Redirection will be handled by the useEffect above after profile is fetched
-    // No immediate router.push("/") here
+    // Redirection will be handled by the useEffect above
   }
 
   const signUp = async (email: string, password: string, userData: any) => {
@@ -118,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           major: userData.major,
           graduationYear: userData.graduationYear,
           university: userData.university,
-          is_profile_complete: false, // Explicitly set to false on signup
+          is_profile_complete: false,
         },
       },
     })
@@ -127,9 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Sign up error:", error)
       throw error
     }
-    // The trigger 'handle_new_user' in Supabase will create the profile.
-    // The onAuthStateChange listener will fetch it.
-    // Redirection will be handled by the useEffect.
+    // The user will be redirected to profile completion by the useEffect
   }
 
   const signOut = async () => {
@@ -142,7 +169,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, authChecked, signIn, signUp, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        authChecked,
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,10 +11,40 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { BellIcon, EyeIcon, LockIcon, PaletteIcon, UserIcon } from "lucide-react"
+import { BellIcon, EyeIcon, LockIcon, PaletteIcon, UserIcon, Loader2, Upload } from "lucide-react"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase/client"
+import { useSearchParams } from "next/navigation"
 
 export default function SettingsPage() {
+  const { user, profile, updateProfile } = useAuth()
+  const { toast } = useToast()
+  const searchParams = useSearchParams()
+  const defaultTab = searchParams.get("tab") || "profile"
+
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    bio: "",
+    major: "",
+    graduationYear: "",
+    university: "",
+    avatarUrl: "",
+  })
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string>("")
+  const [loading, setLoading] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  })
+  const [passwordLoading, setPasswordLoading] = useState(false)
+
+  // Notification preferences (UI only for now)
   const [notifications, setNotifications] = useState({
     posts: true,
     messages: true,
@@ -21,6 +53,7 @@ export default function SettingsPage() {
     friends: true,
   })
 
+  // Privacy settings (UI only for now)
   const [privacy, setPrivacy] = useState({
     profileVisibility: "friends",
     showEmail: false,
@@ -28,8 +61,167 @@ export default function SettingsPage() {
     allowMessages: true,
   })
 
-  const handleSave = () => {
-    alert("Settings saved successfully! ✅")
+  // Initialize form with profile data
+  useEffect(() => {
+    if (profile) {
+      const nameParts = profile.full_name?.split(" ") || ["", ""]
+      setFormData({
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        username: profile.username || "",
+        bio: profile.bio || "",
+        major: profile.major || "",
+        graduationYear: profile.graduation_year?.toString() || "",
+        university: profile.university || "",
+        avatarUrl: profile.avatar_url || "",
+      })
+      setAvatarPreview(profile.avatar_url || "")
+    }
+  }, [profile])
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setAvatarFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setAvatarPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const uploadAvatar = async (file: File): Promise<string | null> => {
+    if (!user) return null
+
+    const fileExt = file.name.split(".").pop()
+    const fileName = `${user.id}-${Math.random()}.${fileExt}`
+    const filePath = `avatars/${fileName}`
+
+    const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file)
+
+    if (uploadError) {
+      console.error("Error uploading avatar:", uploadError)
+      return null
+    }
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(filePath)
+
+    return data.publicUrl
+  }
+
+  const handleProfileSave = async () => {
+    if (!user) return
+
+    if (!formData.firstName || !formData.lastName) {
+      toast({
+        title: "Missing Information",
+        description: "First name and last name are required.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      let avatarUrl = formData.avatarUrl
+
+      // Upload new avatar if selected
+      if (avatarFile) {
+        const uploadedUrl = await uploadAvatar(avatarFile)
+        if (uploadedUrl) {
+          avatarUrl = uploadedUrl
+        }
+      }
+
+      // Update profile
+      await updateProfile({
+        full_name: `${formData.firstName} ${formData.lastName}`,
+        username: formData.username,
+        bio: formData.bio,
+        major: formData.major,
+        graduation_year: formData.graduationYear ? Number.parseInt(formData.graduationYear) : null,
+        university: formData.university,
+        avatar_url: avatarUrl,
+        is_profile_complete: true, // Ensure profile is marked as complete
+      })
+
+      toast({
+        title: "Profile Updated! ✅",
+        description: "Your profile has been saved successfully.",
+      })
+
+      // Clear avatar file after successful upload
+      setAvatarFile(null)
+    } catch (error: any) {
+      console.error("Error updating profile:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all password fields.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "New password and confirmation don't match.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setPasswordLoading(true)
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
+      })
+
+      if (error) throw error
+
+      toast({
+        title: "Password Updated! ✅",
+        description: "Your password has been changed successfully.",
+      })
+
+      // Clear password fields
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      })
+    } catch (error: any) {
+      console.error("Error updating password:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setPasswordLoading(false)
+    }
   }
 
   return (
@@ -48,7 +240,7 @@ export default function SettingsPage() {
         </header>
 
         <div className="container mx-auto px-4 py-6 max-w-4xl">
-          <Tabs defaultValue="profile" className="w-full">
+          <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5 mb-6">
               <TabsTrigger value="profile" className="flex items-center gap-2">
                 <UserIcon className="h-4 w-4" />
@@ -79,23 +271,47 @@ export default function SettingsPage() {
                   <CardDescription>Update your personal information and academic details</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Avatar Upload */}
                   <div className="flex items-center gap-6">
                     <div className="relative">
-                      <img
-                        src="/placeholder.svg?height=100&width=100&query=student profile"
-                        alt="Profile"
-                        className="h-24 w-24 rounded-full object-cover"
+                      <div className="h-24 w-24 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
+                        {avatarPreview ? (
+                          <img
+                            src={avatarPreview || "/placeholder.svg"}
+                            alt="Profile"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center">
+                            <UserIcon className="h-12 w-12 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <label
+                        htmlFor="avatar-upload"
+                        className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center cursor-pointer"
+                      >
+                        <Upload className="h-4 w-4 text-white" />
+                      </label>
+                      <input
+                        id="avatar-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarChange}
+                        className="hidden"
+                        disabled={loading}
                       />
-                      <Button size="sm" className="absolute bottom-0 right-0 rounded-full h-8 w-8 p-0">
-                        ✏️
-                      </Button>
                     </div>
                     <div className="space-y-2">
                       <h3 className="font-semibold">Profile Photo</h3>
                       <p className="text-sm text-muted-foreground">
                         Upload a new profile picture to help others recognize you
                       </p>
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById("avatar-upload")?.click()}
+                      >
                         Change Photo
                       </Button>
                     </div>
@@ -104,12 +320,32 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" defaultValue="Michael" />
+                      <Input
+                        id="firstName"
+                        value={formData.firstName}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        disabled={loading}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" defaultValue="Turner" />
+                      <Input
+                        id="lastName"
+                        value={formData.lastName}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        disabled={loading}
+                      />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      disabled={loading}
+                    />
                   </div>
 
                   <div className="space-y-2">
@@ -117,44 +353,95 @@ export default function SettingsPage() {
                     <Textarea
                       id="bio"
                       placeholder="Tell us about yourself..."
-                      defaultValue="Computer Science student passionate about AI and web development. Always looking to collaborate on cool projects! 🚀"
+                      value={formData.bio}
+                      onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                       rows={3}
+                      disabled={loading}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="university">University</Label>
+                    <Select
+                      value={formData.university}
+                      onValueChange={(value) => setFormData({ ...formData, university: value })}
+                      disabled={loading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your university" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Stanford University">Stanford University</SelectItem>
+                        <SelectItem value="MIT">MIT</SelectItem>
+                        <SelectItem value="Harvard University">Harvard University</SelectItem>
+                        <SelectItem value="UC Berkeley">UC Berkeley</SelectItem>
+                        <SelectItem value="UCLA">UCLA</SelectItem>
+                        <SelectItem value="University of Washington">University of Washington</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="major">Major</Label>
-                      <Select defaultValue="cs">
+                      <Select
+                        value={formData.major}
+                        onValueChange={(value) => setFormData({ ...formData, major: value })}
+                        disabled={loading}
+                      >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select your major" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="cs">Computer Science</SelectItem>
-                          <SelectItem value="business">Business</SelectItem>
-                          <SelectItem value="engineering">Engineering</SelectItem>
-                          <SelectItem value="psychology">Psychology</SelectItem>
+                          <SelectItem value="Computer Science">Computer Science</SelectItem>
+                          <SelectItem value="Business Administration">Business Administration</SelectItem>
+                          <SelectItem value="Engineering">Engineering</SelectItem>
+                          <SelectItem value="Psychology">Psychology</SelectItem>
+                          <SelectItem value="Biology">Biology</SelectItem>
+                          <SelectItem value="Mathematics">Mathematics</SelectItem>
+                          <SelectItem value="English">English</SelectItem>
+                          <SelectItem value="History">History</SelectItem>
+                          <SelectItem value="Art">Art</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="year">Graduation Year</Label>
-                      <Select defaultValue="2025">
+                      <Select
+                        value={formData.graduationYear}
+                        onValueChange={(value) => setFormData({ ...formData, graduationYear: value })}
+                        disabled={loading}
+                      >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select year" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="2024">2024</SelectItem>
                           <SelectItem value="2025">2025</SelectItem>
                           <SelectItem value="2026">2026</SelectItem>
                           <SelectItem value="2027">2027</SelectItem>
+                          <SelectItem value="2028">2028</SelectItem>
+                          <SelectItem value="2029">2029</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
 
-                  <Button onClick={handleSave} className="bg-gradient-to-r from-blue-500 to-purple-600">
-                    Save Changes
+                  <Button
+                    onClick={handleProfileSave}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
                   </Button>
                 </CardContent>
               </Card>
@@ -228,9 +515,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSave} className="bg-gradient-to-r from-green-500 to-blue-600">
-                    Save Notification Settings
-                  </Button>
+                  <Button className="bg-gradient-to-r from-green-500 to-blue-600">Save Notification Settings</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -276,19 +561,6 @@ export default function SettingsPage() {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-medium">Show Phone Number</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Allow others to see your phone number on your profile
-                        </p>
-                      </div>
-                      <Switch
-                        checked={privacy.showPhone}
-                        onCheckedChange={(checked) => setPrivacy({ ...privacy, showPhone: checked })}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
                         <h4 className="font-medium">Allow Direct Messages</h4>
                         <p className="text-sm text-muted-foreground">Allow anyone to send you direct messages</p>
                       </div>
@@ -299,9 +571,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSave} className="bg-gradient-to-r from-purple-500 to-pink-600">
-                    Save Privacy Settings
-                  </Button>
+                  <Button className="bg-gradient-to-r from-purple-500 to-pink-600">Save Privacy Settings</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -316,27 +586,9 @@ export default function SettingsPage() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>Theme</Label>
-                      <Select defaultValue="system">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="light">🌞 Light Mode</SelectItem>
-                          <SelectItem value="dark">🌙 Dark Mode</SelectItem>
-                          <SelectItem value="system">💻 System Default</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Accent Color</Label>
-                      <div className="flex gap-3">
-                        <div className="h-8 w-8 rounded-full bg-blue-500 cursor-pointer ring-2 ring-blue-500 ring-offset-2"></div>
-                        <div className="h-8 w-8 rounded-full bg-purple-500 cursor-pointer hover:ring-2 hover:ring-purple-500 hover:ring-offset-2"></div>
-                        <div className="h-8 w-8 rounded-full bg-green-500 cursor-pointer hover:ring-2 hover:ring-green-500 hover:ring-offset-2"></div>
-                        <div className="h-8 w-8 rounded-full bg-pink-500 cursor-pointer hover:ring-2 hover:ring-pink-500 hover:ring-offset-2"></div>
-                        <div className="h-8 w-8 rounded-full bg-orange-500 cursor-pointer hover:ring-2 hover:ring-orange-500 hover:ring-offset-2"></div>
-                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Theme settings can be changed using the theme toggle in the sidebar.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -354,9 +606,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSave} className="bg-gradient-to-r from-pink-500 to-orange-600">
-                    Save Appearance Settings
-                  </Button>
+                  <Button className="bg-gradient-to-r from-pink-500 to-orange-600">Save Appearance Settings</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -371,35 +621,66 @@ export default function SettingsPage() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="email">Email Address</Label>
-                      <Input id="email" type="email" defaultValue="michael.turner@university.edu" />
+                      <Input id="email" type="email" value={user?.email || ""} disabled />
+                      <p className="text-xs text-muted-foreground">
+                        Email changes require verification and are handled through account settings.
+                      </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input id="phone" type="tel" defaultValue="+1 (555) 123-4567" />
-                    </div>
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Change Password</h3>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input id="currentPassword" type="password" placeholder="Enter current password" />
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="currentPassword">Current Password</Label>
+                        <Input
+                          id="currentPassword"
+                          type="password"
+                          placeholder="Enter current password"
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          disabled={passwordLoading}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input id="newPassword" type="password" placeholder="Enter new password" />
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword">New Password</Label>
+                        <Input
+                          id="newPassword"
+                          type="password"
+                          placeholder="Enter new password"
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          disabled={passwordLoading}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <Input id="confirmPassword" type="password" placeholder="Confirm new password" />
-                    </div>
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          placeholder="Confirm new password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          disabled={passwordLoading}
+                        />
+                      </div>
 
-                  <div className="flex gap-4">
-                    <Button onClick={handleSave} className="bg-gradient-to-r from-blue-500 to-purple-600">
-                      Update Account
-                    </Button>
-                    <Button variant="outline">Change Password</Button>
+                      <Button
+                        onClick={handlePasswordChange}
+                        className="bg-gradient-to-r from-blue-500 to-purple-600"
+                        disabled={passwordLoading}
+                      >
+                        {passwordLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Updating Password...
+                          </>
+                        ) : (
+                          "Change Password"
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="border-t pt-6">
