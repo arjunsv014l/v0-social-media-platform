@@ -3,9 +3,9 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase/client"
-import { PostCard } from "@/components/post-card"
-import { NewPostCard } from "@/components/new-post-card"
-import { TrendingSidebar } from "@/components/trending-sidebar"
+import PostCard from "@/components/post-card"
+import NewPostCard from "@/components/new-post-card"
+import TrendingSidebar from "@/components/trending-sidebar"
 import { Loader2 } from "lucide-react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -88,11 +88,25 @@ export default function HomePage() {
           {} as Record<string, number>,
         ) || {}
 
+      // Get likes count for each post
+      const { data: allLikesData } = await supabase.from("post_likes").select("post_id").in("post_id", postIds)
+
+      const likesCount =
+        allLikesData?.reduce(
+          (acc, like) => {
+            acc[like.post_id] = (acc[like.post_id] || 0) + 1
+            return acc
+          },
+          {} as Record<string, number>,
+        ) || {}
+
       const postsWithInteractions =
         postsData?.map((post) => ({
           ...post,
           user_has_liked: likedPostIds.has(post.id),
           comments_count: commentsCount[post.id] || 0,
+          likes_count: likesCount[post.id] || 0,
+          shares_count: 0, // TODO: Implement shares functionality
         })) || []
 
       if (mountedRef.current) {
@@ -241,7 +255,7 @@ export default function HomePage() {
             ) : (
               <div className="space-y-6">
                 {posts.map((post) => (
-                  <PostCard key={post.id} post={post} />
+                  <PostCard key={post.id} post={post} author={post.profiles} />
                 ))}
               </div>
             )}
