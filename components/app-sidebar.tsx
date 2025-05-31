@@ -155,7 +155,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar variant="inset" className="border-r-0">
+      <Sidebar className="border-r-0">
         <SidebarHeader className="border-b border-sidebar-border">
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-600">

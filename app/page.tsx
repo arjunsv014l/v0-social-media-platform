@@ -1,246 +1,198 @@
 "use client"
 
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { BellIcon, MessageSquareIcon, PlusIcon, SearchIcon, Loader2 } from "lucide-react"
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import NewPostCard from "@/components/new-post-card"
-import PostCard from "@/components/post-card"
-import TrendingSidebar from "@/components/trending-sidebar"
 import { useAuth } from "@/contexts/auth-context"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { supabase } from "@/lib/supabase/client"
-import type { PostWithAuthor } from "@/lib/supabase/types"
+import { PostCard } from "@/components/post-card"
+import { NewPostCard } from "@/components/new-post-card"
+import { TrendingSidebar } from "@/components/trending-sidebar"
+import { Loader2, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/use-toast"
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
-import { CreatePostDialog } from "@/components/create-post-dialog"
-import { SearchDialog } from "@/components/search-dialog"
-import { NotificationsPopover } from "@/components/notifications-popover"
+interface Post {
+  id: string
+  content: string
+  image_url?: string
+  created_at: string
+  user_id: string
+  likes_count: number
+  comments_count: number
+  user_has_liked: boolean
+  profiles: {
+    full_name: string
+    username: string
+    avatar_url?: string
+  }
+}
 
-export default function Home() {
-  const { user, profile, loading } = useAuth()
-  const [posts, setPosts] = useState<PostWithAuthor[]>([])
+export default function HomePage() {
+  const { user, profile } = useAuth()
+  const { toast } = useToast()
+  const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-
-  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
-
-  // Refs to prevent infinite operations
+  const [refreshing, setRefreshing] = useState(false)
   const mountedRef = useRef(true)
-  const subscriptionRef = useRef<any>(null)
+  const fetchingRef = useRef(false)
 
-  useEffect(() => {
-    mountedRef.current = true
+  const fetchPosts = useCallback(
+    async (showRefreshLoader = false) => {
+      if (fetchingRef.current) return
+      fetchingRef.current = true
 
-    const fetchPosts = async () => {
-      if (!mountedRef.current) return
-
-      setLoadingPosts(true)
       try {
+        if (showRefreshLoader) setRefreshing(true)
+        else setLoadingPosts(true)
+
         const { data, error } = await supabase
           .from("posts")
-          .select(`*, author:profiles!user_id(*)`)
+          .select(`
+          *,
+          profiles:user_id (
+            full_name,
+            username,
+            avatar_url
+          ),
+          likes_count:post_likes(count),
+          comments_count:post_comments(count),
+          user_has_liked:post_likes!inner(user_id)
+        `)
+          .eq("post_likes.user_id", user?.id || "")
           .order("created_at", { ascending: false })
           .limit(20)
 
-        if (error) {
-          console.error("Error fetching posts:", error)
-          if (mountedRef.current) {
-            setPosts([])
-          }
-        } else if (mountedRef.current) {
-          setPosts((data as PostWithAuthor[]) || [])
+        if (error) throw error
+
+        if (mountedRef.current) {
+          setPosts(data || [])
         }
-      } catch (error) {
-        console.error("Unexpected error fetching posts:", error)
+      } catch (error: any) {
+        console.error("Error fetching posts:", error)
+        if (mountedRef.current) {
+          toast({
+            title: "Error loading posts",
+            description: error.message || "Failed to load posts. Please try again.",
+            variant: "destructive",
+          })
+        }
       } finally {
+        fetchingRef.current = false
         if (mountedRef.current) {
           setLoadingPosts(false)
+          setRefreshing(false)
         }
       }
-    }
+    },
+    [user?.id, toast],
+  )
 
-    // Only fetch posts if we're not loading auth
-    if (!loading) {
-      fetchPosts()
-
-      // Set up real-time subscription with debouncing
-      let debounceTimeout: NodeJS.Timeout
-
-      const handleNewPost = (payload: any) => {
-        clearTimeout(debounceTimeout)
-        debounceTimeout = setTimeout(async () => {
-          if (!mountedRef.current) return
-
-          try {
-            const { data: newPostData, error: newPostError } = await supabase
-              .from("posts")
-              .select(`*, author:profiles!user_id(*)`)
-              .eq("id", payload.new.id)
-              .single()
-
-            if (newPostError) {
-              console.error("Error fetching new post:", newPostError)
-            } else if (newPostData && mountedRef.current) {
-              setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
-            }
-          } catch (error) {
-            console.error("Error handling new post:", error)
-          }
-        }, 500) // 500ms debounce
-      }
-
-      subscriptionRef.current = supabase
-        .channel("realtime-posts-home")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, handleNewPost)
-        .subscribe()
-
-      return () => {
-        clearTimeout(debounceTimeout)
-        if (subscriptionRef.current) {
-          supabase.removeChannel(subscriptionRef.current)
-          subscriptionRef.current = null
-        }
-      }
-    }
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [loading])
-
-  // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
-      if (subscriptionRef.current) {
-        supabase.removeChannel(subscriptionRef.current)
-      }
     }
   }, [])
 
-  // Show loading only during initial auth check
-  if (loading) {
+  useEffect(() => {
+    if (!user) return
+
+    fetchPosts()
+
+    const channel = supabase
+      .channel(`posts-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
+        if (mountedRef.current) {
+          setTimeout(() => fetchPosts(), 500)
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, () => {
+        if (mountedRef.current) {
+          setTimeout(() => fetchPosts(), 300)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, fetchPosts])
+
+  const handleRefresh = () => {
+    fetchPosts(true)
+  }
+
+  const handlePostCreated = () => {
+    fetchPosts(true)
+  }
+
+  if (!user || !profile) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+      <SidebarInset>
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="mt-2 text-sm text-muted-foreground">Loading your feed...</p>
+          </div>
         </div>
-      </div>
+      </SidebarInset>
     )
   }
 
   return (
     <SidebarInset>
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
-        <div className="flex items-center gap-2">
-          <SidebarTrigger className="md:hidden" />
-          <div className="hidden md:block">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Home Feed 🏠
-            </h1>
-          </div>
-        </div>
-        <div className="relative hidden md:block">
-          <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="search"
-            placeholder="Search posts, people, events..."
-            className="h-9 w-64 rounded-full border border-input bg-background pl-8 pr-4 text-sm focus:outline-none"
-            onFocus={() => setIsSearchOpen(true)}
-            readOnly
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" onClick={() => setIsSearchOpen(true)} className="md:hidden">
-            <SearchIcon className="h-5 w-5" />
-            <span className="sr-only">Search</span>
+      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage>Home Feed</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="ml-auto">
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-
-          {user && (
-            <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
-              <Button size="icon" variant="ghost" className="relative">
-                <BellIcon className="h-5 w-5" />
-                <span className="sr-only">Notifications</span>
-              </Button>
-            </NotificationsPopover>
-          )}
-
-          {user && (
-            <Link href="/messages">
-              <Button size="icon" variant="ghost" className="relative">
-                <MessageSquareIcon className="h-5 w-5" />
-                <span className="sr-only">Messages</span>
-              </Button>
-            </Link>
-          )}
-
-          {user && (
-            <Button
-              size="icon"
-              className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
-              onClick={() => setIsCreatePostOpen(true)}
-            >
-              <PlusIcon className="h-5 w-5" />
-              <span className="sr-only">New post</span>
-            </Button>
-          )}
-
-          <div className="flex items-center gap-2">
-            {user && profile ? (
-              <Link href="/profile">
-                <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                  <img
-                    src={profile.avatar_url || "/placeholder.svg?height=36&width=36&query=student profile"}
-                    alt={profile.full_name || "Profile"}
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
-                  <span className="sr-only">Profile</span>
-                </Button>
-              </Link>
-            ) : !user && !loading ? (
-              <Link href="/login">
-                <Button variant="outline" size="sm" className="hidden md:flex">
-                  Login
-                </Button>
-              </Link>
-            ) : null}
-          </div>
         </div>
       </header>
 
-      <main className="flex-1 p-4">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            {user && <NewPostCard />}
-            {loadingPosts ? (
-              <div className="flex justify-center items-center py-10">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Loading posts...</p>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="container mx-auto max-w-2xl p-4">
+            <div className="space-y-6">
+              <NewPostCard onPostCreated={handlePostCreated} />
+
+              {loadingPosts ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+                    <p className="mt-2 text-sm text-muted-foreground">Loading posts...</p>
+                  </div>
                 </div>
-              </div>
-            ) : posts.length > 0 ? (
-              <div className="space-y-4">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} author={post.author} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No posts yet. Be the first to share something or follow others!
-              </div>
-            )}
-          </div>
-          <div className="hidden lg:block">
-            <TrendingSidebar />
+              ) : posts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {posts.map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </main>
-      <CreatePostDialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
-      <SearchDialog open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+
+        <div className="hidden lg:block w-80 border-l">
+          <TrendingSidebar />
+        </div>
+      </div>
     </SidebarInset>
   )
 }

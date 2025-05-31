@@ -5,8 +5,8 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Toaster } from "@/components/ui/toaster"
-import { Suspense } from "react"
-import LoadingScreen from "@/components/loading-screen"
+import { SidebarProvider } from "@/components/sidebar/sidebar-provider"
+import AppSidebar from "@/components/sidebar/app-sidebar"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -83,9 +83,13 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <Suspense fallback={<LoadingScreen message="Initializing CampusConnect..." />}>
-            <AuthProvider>{children}</AuthProvider>
-          </Suspense>
+          <SidebarProvider>
+            <div className="flex min-h-screen w-full">
+              <AppSidebar />
+              <main className="flex-1 overflow-hidden">{children}</main>
+            </div>
+          </SidebarProvider>
+          <AuthProvider>{children}</AuthProvider>
           <Toaster />
         </ThemeProvider>
       </body>
