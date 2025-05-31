@@ -1,15 +1,13 @@
 "use client"
 
-import { useAuth } from "@/contexts/auth-context"
 import { useEffect, useState, useRef, useCallback } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { PostCard } from "@/components/post-card"
 import { NewPostCard } from "@/components/new-post-card"
 import { TrendingSidebar } from "@/components/trending-sidebar"
-import { Loader2, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useToast } from "@/components/ui/use-toast"
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { Loader2 } from "lucide-react"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
@@ -17,132 +15,186 @@ interface Post {
   id: string
   content: string
   image_url?: string
+  video_url?: string
   created_at: string
   user_id: string
   likes_count: number
   comments_count: number
-  user_has_liked: boolean
+  shares_count: number
   profiles: {
-    full_name: string
+    id: string
     username: string
+    full_name: string
     avatar_url?: string
   }
+  user_has_liked: boolean
 }
 
 export default function HomePage() {
   const { user, profile } = useAuth()
-  const { toast } = useToast()
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
   const fetchingRef = useRef(false)
 
-  const fetchPosts = useCallback(
-    async (showRefreshLoader = false) => {
-      if (fetchingRef.current) return
-      fetchingRef.current = true
+  const fetchPosts = useCallback(async () => {
+    if (fetchingRef.current || !user) return
 
-      try {
-        if (showRefreshLoader) setRefreshing(true)
-        else setLoadingPosts(true)
+    fetchingRef.current = true
+    console.log("HomePage: Fetching posts...")
 
-        const { data, error } = await supabase
-          .from("posts")
-          .select(`
+    try {
+      const { data: postsData, error: postsError } = await supabase
+        .from("posts")
+        .select(`
           *,
           profiles:user_id (
-            full_name,
+            id,
             username,
+            full_name,
             avatar_url
-          ),
-          likes_count:post_likes(count),
-          comments_count:post_comments(count),
-          user_has_liked:post_likes!inner(user_id)
+          )
         `)
-          .eq("post_likes.user_id", user?.id || "")
-          .order("created_at", { ascending: false })
-          .limit(20)
+        .order("created_at", { ascending: false })
+        .limit(20)
 
-        if (error) throw error
-
-        if (mountedRef.current) {
-          setPosts(data || [])
-        }
-      } catch (error: any) {
-        console.error("Error fetching posts:", error)
-        if (mountedRef.current) {
-          toast({
-            title: "Error loading posts",
-            description: error.message || "Failed to load posts. Please try again.",
-            variant: "destructive",
-          })
-        }
-      } finally {
-        fetchingRef.current = false
-        if (mountedRef.current) {
-          setLoadingPosts(false)
-          setRefreshing(false)
-        }
+      if (postsError) {
+        console.error("HomePage: Error fetching posts:", postsError)
+        throw postsError
       }
-    },
-    [user?.id, toast],
-  )
+
+      if (!mountedRef.current) return
+
+      // Get likes for current user
+      const postIds = postsData?.map((post) => post.id) || []
+      const { data: likesData } = await supabase
+        .from("post_likes")
+        .select("post_id")
+        .eq("user_id", user.id)
+        .in("post_id", postIds)
+
+      const likedPostIds = new Set(likesData?.map((like) => like.post_id) || [])
+
+      // Get comments count for each post
+      const { data: commentsData } = await supabase.from("post_comments").select("post_id").in("post_id", postIds)
+
+      const commentsCount =
+        commentsData?.reduce(
+          (acc, comment) => {
+            acc[comment.post_id] = (acc[comment.post_id] || 0) + 1
+            return acc
+          },
+          {} as Record<string, number>,
+        ) || {}
+
+      const postsWithInteractions =
+        postsData?.map((post) => ({
+          ...post,
+          user_has_liked: likedPostIds.has(post.id),
+          comments_count: commentsCount[post.id] || 0,
+        })) || []
+
+      if (mountedRef.current) {
+        setPosts(postsWithInteractions)
+        setError(null)
+        console.log("HomePage: Posts loaded successfully:", postsWithInteractions.length)
+      }
+    } catch (error: any) {
+      console.error("HomePage: Error in fetchPosts:", error)
+      if (mountedRef.current) {
+        setError(error.message || "Failed to load posts")
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoadingPosts(false)
+      }
+      fetchingRef.current = false
+    }
+  }, [user])
 
   useEffect(() => {
     mountedRef.current = true
+
+    if (user) {
+      fetchPosts()
+    }
+
     return () => {
       mountedRef.current = false
     }
-  }, [])
+  }, [user, fetchPosts])
 
+  // Set up real-time subscriptions
   useEffect(() => {
     if (!user) return
 
-    fetchPosts()
+    console.log("HomePage: Setting up real-time subscriptions")
 
-    const channel = supabase
-      .channel(`posts-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
-        if (mountedRef.current) {
-          setTimeout(() => fetchPosts(), 500)
-        }
+    const postsChannel = supabase
+      .channel("posts-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, (payload) => {
+        console.log("HomePage: Posts change detected:", payload.eventType)
+
+        // Debounce the fetch to avoid rapid-fire updates
+        setTimeout(() => {
+          if (mountedRef.current && !fetchingRef.current) {
+            fetchPosts()
+          }
+        }, 1000)
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, () => {
-        if (mountedRef.current) {
-          setTimeout(() => fetchPosts(), 300)
+      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, (payload) => {
+        console.log("HomePage: Post likes change detected:", payload.eventType)
+
+        // Update likes count locally for better UX
+        if (payload.eventType === "INSERT" && payload.new) {
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === payload.new.post_id
+                ? {
+                    ...post,
+                    likes_count: post.likes_count + 1,
+                    user_has_liked: payload.new.user_id === user.id ? true : post.user_has_liked,
+                  }
+                : post,
+            ),
+          )
+        } else if (payload.eventType === "DELETE" && payload.old) {
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === payload.old.post_id
+                ? {
+                    ...post,
+                    likes_count: Math.max(0, post.likes_count - 1),
+                    user_has_liked: payload.old.user_id === user.id ? false : post.user_has_liked,
+                  }
+                : post,
+            ),
+          )
         }
       })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      console.log("HomePage: Cleaning up subscriptions")
+      supabase.removeChannel(postsChannel)
     }
   }, [user, fetchPosts])
 
-  const handleRefresh = () => {
-    fetchPosts(true)
-  }
-
-  const handlePostCreated = () => {
-    fetchPosts(true)
-  }
-
-  if (!user || !profile) {
+  if (!user) {
     return (
-      <SidebarInset>
-        <div className="flex h-screen items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">Loading your feed...</p>
-          </div>
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-2 text-sm text-muted-foreground">Loading your feed...</p>
         </div>
-      </SidebarInset>
+      </div>
     )
   }
 
   return (
-    <SidebarInset>
+    <div className="flex flex-col h-screen">
+      {/* Header */}
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
@@ -153,46 +205,54 @@ export default function HomePage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        <div className="ml-auto">
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
       </header>
 
+      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className="container mx-auto max-w-2xl p-4">
-            <div className="space-y-6">
-              <NewPostCard onPostCreated={handlePostCreated} />
+          <div className="container mx-auto max-w-2xl p-4 space-y-6">
+            {profile && <NewPostCard />}
 
-              {loadingPosts ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center">
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">Loading posts...</p>
-                  </div>
+            {loadingPosts ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">Loading posts...</p>
                 </div>
-              ) : posts.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {posts.map((post) => (
-                    <PostCard key={post.id} post={post} />
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="text-red-500 mb-4">{error}</p>
+                <button
+                  onClick={() => {
+                    setError(null)
+                    setLoadingPosts(true)
+                    fetchPosts()
+                  }}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {posts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Trending Sidebar - Hidden on mobile */}
         <div className="hidden lg:block w-80 border-l">
           <TrendingSidebar />
         </div>
       </div>
-    </SidebarInset>
+    </div>
   )
 }
