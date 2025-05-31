@@ -26,8 +26,78 @@ export default function StudentSignupForm() {
   const { signUp } = useAuth()
   const { toast } = useToast()
 
+  const validateForm = () => {
+    if (!formData.firstName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "First name is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.lastName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Last name is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.email.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Email is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.password || formData.password.length < 6) {
+      toast({
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.university) {
+      toast({
+        title: "Validation Error",
+        description: "University is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.major) {
+      toast({
+        title: "Validation Error",
+        description: "Major is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.graduationYear) {
+      toast({
+        title: "Validation Error",
+        description: "Graduation year is required",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!validateForm()) return
+
     setLoading(true)
 
     try {
@@ -35,17 +105,18 @@ export default function StudentSignupForm() {
         ...formData,
         userType: "student",
       })
+
       toast({
         title: "Welcome to CampusConnect! 🎓",
-        description: "Your student account has been created successfully.",
+        description: "Your student account has been created successfully. Redirecting to your dashboard...",
       })
     } catch (error: any) {
+      console.error("Signup error:", error)
       toast({
-        title: "Error",
-        description: error.message || "Failed to create account",
+        title: "Registration Failed",
+        description: error.message || "Failed to create account. Please try again.",
         variant: "destructive",
       })
-    } finally {
       setLoading(false)
     }
   }
@@ -198,9 +269,10 @@ export default function StudentSignupForm() {
             type={showPassword ? "text" : "password"}
             value={formData.password}
             onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-            placeholder="Create a strong password"
+            placeholder="Create a strong password (min 6 characters)"
             required
             disabled={loading}
+            minLength={6}
           />
           <Button
             type="button"

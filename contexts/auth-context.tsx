@@ -52,15 +52,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isInitializingRef = useRef(false)
   const lastRedirectRef = useRef<string | null>(null)
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isSigningUpRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
+      console.log("[AuthContext] Fetching profile for user:", userId)
       const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error && error.code !== "PGRST116") {
         console.error("[AuthContext] Error fetching profile:", error)
         return null
       }
+
+      console.log(
+        "[AuthContext] Profile fetched:",
+        profileData
+          ? {
+              user_type: profileData.user_type,
+              is_profile_complete: profileData.is_profile_complete,
+            }
+          : null,
+      )
 
       return profileData as Profile | null
     } catch (error) {
@@ -94,11 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(redirectTimeoutRef.current)
       }
 
-      // Debounce redirects
-      redirectTimeoutRef.current = setTimeout(() => {
-        router.replace(path)
+      // Immediate redirect for better UX
+      router.replace(path)
+
+      // Reset redirect tracking after delay
+      setTimeout(() => {
         lastRedirectRef.current = null
-      }, 100)
+      }, 1000)
     },
     [router, pathname],
   )
@@ -150,20 +164,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
 
-      console.log("[AuthContext] Auth state changed:", event)
+      console.log("[AuthContext] Auth state changed:", event, session?.user?.id)
 
       const currentUser = session?.user ?? null
       setUser(currentUser)
 
       if (currentUser && event !== "TOKEN_REFRESHED") {
-        const userProfile = await fetchProfile(currentUser.id)
-        if (mounted) {
-          setProfile(userProfile)
+        // For new signups, wait a bit for the profile to be created
+        if (event === "SIGNED_UP" || isSigningUpRef.current) {
+          console.log("[AuthContext] New signup detected, waiting for profile creation...")
+          // Wait for profile creation with retries
+          let retries = 0
+          const maxRetries = 5
+          let userProfile = null
+
+          while (retries < maxRetries && !userProfile && mounted) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * (retries + 1))) // Exponential backoff
+            userProfile = await fetchProfile(currentUser.id)
+            retries++
+          }
+
+          if (mounted) {
+            setProfile(userProfile)
+            isSigningUpRef.current = false
+          }
+        } else {
+          const userProfile = await fetchProfile(currentUser.id)
+          if (mounted) {
+            setProfile(userProfile)
+          }
         }
       } else if (!currentUser) {
         if (mounted) {
           setProfile(null)
           lastRedirectRef.current = null
+          isSigningUpRef.current = false
         }
       }
     })
@@ -186,6 +221,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isPublicPath = publicPaths.includes(pathname)
     const isProfileCompletePage = pathname === profileCompletionPath
 
+    console.log("[AuthContext] Evaluating redirections:", {
+      pathname,
+      user: !!user,
+      profile: profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
+      isPublicPath,
+      isProfileCompletePage,
+    })
+
     // No user - redirect to login unless on public pages
     if (!user) {
       if (!isPublicPath) {
@@ -194,8 +237,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // User exists but no profile - wait for profile to load
+    // User exists but no profile - wait for profile to load (with timeout)
     if (!profile) {
+      console.log("[AuthContext] User exists but profile not loaded, waiting...")
       return
     }
 
@@ -219,8 +263,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
+      console.log("[AuthContext] Attempting sign in...")
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+      console.log("[AuthContext] Sign in successful")
     } catch (error) {
       setLoading(false)
       throw error
@@ -229,7 +275,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, userData: any) => {
     setLoading(true)
+    isSigningUpRef.current = true
+
     try {
+      console.log("[AuthContext] Attempting sign up...")
+
+      // Step 1: Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -242,8 +293,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (authError) throw authError
-      if (!authData.user) throw new Error("Sign up failed")
+      if (!authData.user) throw new Error("Sign up failed - no user returned")
 
+      console.log("[AuthContext] Auth user created:", authData.user.id)
+
+      // Step 2: Create profile
       const profileToInsert: Partial<Profile> & { id: string; user_type: Profile["user_type"] } = {
         id: authData.user.id,
         full_name: `${userData.firstName} ${userData.lastName}`,
@@ -252,6 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         is_profile_complete: false,
         updated_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        // Add user-type specific fields
         ...(userData.userType === "student" && {
           university: userData.university,
           major: userData.major,
@@ -260,20 +315,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }),
         ...(userData.userType === "professional" && {
           company: userData.company,
-          position: userData.position,
-          experience_years: userData.experienceYears,
+          job_title: userData.jobTitle,
+          industry: userData.industry,
+          linkedin_profile: userData.linkedinUrl,
         }),
         ...(userData.userType === "corporate" && {
-          company: userData.company,
+          organization_name: userData.companyName,
           industry: userData.industry,
-          company_size: userData.companySize,
+          organization_type: "corporate",
+          contact_email: email,
         }),
       }
 
       const { error: profileError } = await supabase.from("profiles").insert(profileToInsert as Profile)
-      if (profileError) throw profileError
+      if (profileError) {
+        console.error("[AuthContext] Profile creation error:", profileError)
+        throw new Error(`Failed to create profile: ${profileError.message}`)
+      }
+
+      console.log("[AuthContext] Profile created successfully")
+      console.log("[AuthContext] Sign up successful - waiting for auth state change...")
+
+      // Don't set loading to false here - let the auth state change handle it
     } catch (error) {
+      console.error("[AuthContext] Sign up error:", error)
       setLoading(false)
+      isSigningUpRef.current = false
       throw error
     }
   }
@@ -281,10 +348,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true)
     try {
+      console.log("[AuthContext] Signing out...")
       const { error } = await supabase.auth.signOut()
       if (error) throw error
 
       lastRedirectRef.current = null
+      isSigningUpRef.current = false
+      console.log("[AuthContext] Sign out successful")
     } catch (error) {
       throw error
     } finally {
