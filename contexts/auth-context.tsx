@@ -5,8 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { usePathname, useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase/client"
-import type { Profile } from "@/types"
-import { useToast } from "@/components/ui/use-toast"
+import type { Profile } from "@/lib/supabase/types"
 
 interface AuthContextType {
   user: User | null
@@ -32,7 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authChecked, setAuthChecked] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
-  const { toast } = useToast()
 
   // Refs to prevent race conditions
   const mountedRef = useRef(true)
@@ -46,6 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error) {
+        if (error.code === "PGRST116") {
+          console.log("[AuthContext] Profile not found for user:", userId)
+          return null
+        }
         console.error("[AuthContext] Error fetching profile:", error)
         return null
       }
@@ -118,7 +120,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log("[AuthContext] Initializing auth state")
     mountedRef.current = true
-    let authStateSubscription: { unsubscribe: () => void } | null = null
 
     const initAuth = async () => {
       try {
@@ -165,67 +166,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Set up auth state change listener
-    const setupAuthListener = () => {
-      authStateSubscription = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log("[AuthContext] Auth state changed:", event)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[AuthContext] Auth state changed:", event)
 
-        if (!mountedRef.current) return
+      if (!mountedRef.current) return
 
-        const currentUser = session?.user || null
+      const currentUser = session?.user || null
 
-        if (event === "SIGNED_OUT") {
-          setUser(null)
-          setProfile(null)
-          setLoading(false)
-          lastRedirectRef.current = null
-          return
-        }
+      if (event === "SIGNED_OUT") {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        lastRedirectRef.current = null
+        return
+      }
 
-        setUser(currentUser)
+      setUser(currentUser)
 
-        if (currentUser) {
-          // For sign up events, wait a bit for profile creation
-          if (event === "SIGNED_UP") {
-            console.log("[AuthContext] New signup detected, waiting for profile...")
-            // Wait for profile creation with retries
-            let retries = 0
-            const maxRetries = 5
-            let userProfile = null
+      if (currentUser) {
+        // For sign up events, wait a bit for profile creation
+        if (event === "SIGNED_UP") {
+          console.log("[AuthContext] New signup detected, waiting for profile...")
+          // Wait for profile creation with retries
+          let retries = 0
+          const maxRetries = 5
+          let userProfile = null
 
-            while (retries < maxRetries && !userProfile && mountedRef.current) {
-              await new Promise((resolve) => setTimeout(resolve, 500))
-              userProfile = await fetchProfile(currentUser.id)
-              retries++
-            }
+          while (retries < maxRetries && !userProfile && mountedRef.current) {
+            await new Promise((resolve) => setTimeout(resolve, 500))
+            userProfile = await fetchProfile(currentUser.id)
+            retries++
+          }
 
-            if (mountedRef.current) {
-              setProfile(userProfile)
-              setLoading(false)
-            }
-          } else {
-            const userProfile = await fetchProfile(currentUser.id)
-
-            if (mountedRef.current) {
-              setProfile(userProfile)
-              setLoading(false)
-            }
+          if (mountedRef.current) {
+            setProfile(userProfile)
+            setLoading(false)
           }
         } else {
+          const userProfile = await fetchProfile(currentUser.id)
+
           if (mountedRef.current) {
-            setProfile(null)
+            setProfile(userProfile)
             setLoading(false)
           }
         }
-      })
-    }
+      } else {
+        if (mountedRef.current) {
+          setProfile(null)
+          setLoading(false)
+        }
+      }
+    })
 
-    initAuth().then(setupAuthListener)
+    // Initialize auth
+    initAuth()
 
     return () => {
       mountedRef.current = false
-      if (authStateSubscription) {
-        authStateSubscription.unsubscribe()
-      }
+      subscription.unsubscribe()
     }
   }, [fetchProfile])
 
@@ -395,11 +395,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       safeRedirect("/login", "User signed out")
     } catch (error) {
       console.error("[AuthContext] Sign out failed:", error)
-      toast({
-        title: "Sign out failed",
-        description: "An error occurred while signing out. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
     }
