@@ -1,120 +1,81 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Building2 } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Eye, EyeOff } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [activeTab, setActiveTab] = useState("student")
-  const { signIn, loading } = useAuth()
-  const { toast } = useToast()
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const { signIn } = useAuth()
+  const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
+    setIsLoading(true)
 
-    if (!email || !password) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter both email and password.",
-        variant: "destructive",
-      })
+    // Basic validation
+    if (!email.trim() || !password) {
+      setError("Please fill in all fields")
+      setIsLoading(false)
+      return
+    }
+
+    if (!email.includes("@")) {
+      setError("Please enter a valid email address")
+      setIsLoading(false)
       return
     }
 
     try {
-      console.log("[LoginPage] Attempting login for:", email)
-      await signIn(email, password)
-
-      toast({
-        title: "Welcome back! 🎉",
-        description: "You've successfully logged in. Redirecting to dashboard...",
-      })
+      await signIn(email.trim(), password)
+      // Redirect will be handled by AuthContext
     } catch (error: any) {
-      console.error("[LoginPage] Login error:", error)
-      toast({
-        title: "Login Failed",
-        description: error.message || "Failed to sign in. Please check your credentials.",
-        variant: "destructive",
-      })
+      console.error("Login error:", error)
+      setError(error.message || "Failed to sign in. Please check your credentials.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const getTabContent = (userType: string, icon: React.ReactNode, title: string, description: string) => (
-    <div className="text-center mb-6">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
-        {icon}
-      </div>
-      <h3 className="text-xl font-semibold">{title}</h3>
-      <p className="text-muted-foreground text-sm">{description}</p>
-    </div>
-  )
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/5"></div>
-      <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/95">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Welcome Back! ✨
-          </CardTitle>
-          <CardDescription>Sign in to your CampusConnect account</CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">Welcome back</CardTitle>
+          <CardDescription className="text-center">Sign in to your CampusConnect account</CardDescription>
         </CardHeader>
-
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
-                <GraduationCap className="h-3 w-3" />
-                Student
-              </TabsTrigger>
-              <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
-                <Building2 className="h-3 w-3" />
-                Corporate
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="student">
-              {getTabContent(
-                "student",
-                <GraduationCap className="h-6 w-6 text-white" />,
-                "Student Login",
-                "Access your campus network",
-              )}
-            </TabsContent>
-
-            <TabsContent value="corporate">
-              {getTabContent(
-                "corporate",
-                <Building2 className="h-6 w-6 text-white" />,
-                "Corporate Login",
-                "Find talent and post opportunities",
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your.email@domain.com"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
+                disabled={isLoading}
                 autoComplete="email"
+                required
               />
             </div>
             <div className="space-y-2">
@@ -126,59 +87,42 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
+                  disabled={isLoading}
                   autoComplete="current-password"
+                  required
                 />
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
+                  disabled={isLoading}
                 >
-                  {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <input type="checkbox" id="remember" className="rounded" disabled={loading} />
-                <Label htmlFor="remember" className="text-sm">
-                  Remember me
-                </Label>
-              </div>
-              <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-              disabled={loading}
-            >
-              {loading ? (
+          </CardContent>
+          <CardFooter className="flex flex-col space-y-4">
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...
                 </>
               ) : (
-                "Sign In 🚀"
+                "Sign In"
               )}
             </Button>
-          </form>
-        </CardContent>
-
-        <CardFooter className="text-center">
-          <div className="text-sm w-full">
-            {"Don't have an account? "}
-            <Link href="/signup" className="text-blue-600 hover:underline font-medium">
-              Sign up here! 🎓
-            </Link>
-          </div>
-        </CardFooter>
+            <div className="text-center text-sm">
+              <span className="text-muted-foreground">Don't have an account? </span>
+              <Link href="/signup" className="text-primary hover:underline">
+                Sign up
+              </Link>
+            </div>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   )
