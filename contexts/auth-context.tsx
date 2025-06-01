@@ -12,12 +12,14 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   authChecked: boolean
+  error: string | null
   signIn: (email: string, password: string, userTypeAttempt: Profile["user_type"]) => Promise<void>
   signUp: (
     userData: Omit<Profile, "id" | "updated_at" | "avatar_url" | "username"> & { email: string; password: string },
   ) => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<Profile | null>
+  clearError: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -29,19 +31,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [authChecked, setAuthChecked] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
 
-  // Refs to prevent race conditions
+  // Refs to prevent race conditions and memory leaks
   const mountedRef = useRef(true)
   const redirectingRef = useRef(false)
   const lastRedirectRef = useRef<string | null>(null)
+  const initializingRef = useRef(false)
 
-  // Fetch user profile from Supabase
+  // Clear error function
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  // Fetch user profile with timeout and error handling
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
       console.log("[AuthContext] Fetching profile for user:", userId)
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Profile fetch timeout")), 10000)
+      })
+
+      const fetchPromise = supabase.from("profiles").select("*").eq("id", userId).single()
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise])
 
       if (error) {
         if (error.code === "PGRST116") {
@@ -49,20 +66,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return null
         }
         console.error("[AuthContext] Error fetching profile:", error)
-        return null
+        throw error
       }
 
       console.log("[AuthContext] Profile fetched successfully")
       return data as Profile
     } catch (error) {
       console.error("[AuthContext] Exception in fetchProfile:", error)
+      setError("Failed to load user profile")
       return null
     }
   }, [])
 
   // Refresh the user profile
   const refreshProfile = useCallback(async (): Promise<Profile | null> => {
-    if (!user?.id) return null
+    if (!user?.id || !mountedRef.current) return null
 
     try {
       console.log("[AuthContext] Refreshing profile...")
@@ -75,6 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return updatedProfile
     } catch (error) {
       console.error("[AuthContext] Error refreshing profile:", error)
+      if (mountedRef.current) {
+        setError("Failed to refresh profile")
+      }
       return null
     }
   }, [user?.id, fetchProfile])
@@ -93,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Safe redirect function to prevent race conditions
+  // Safe redirect function with debouncing
   const safeRedirect = useCallback(
     (path: string, reason: string) => {
       if (!mountedRef.current || redirectingRef.current || pathname === path || lastRedirectRef.current === path) {
@@ -104,9 +125,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       redirectingRef.current = true
       lastRedirectRef.current = path
 
-      router.push(path)
+      // Use replace for auth redirects to prevent back button issues
+      router.replace(path)
 
-      // Reset redirect flag after a delay
+      // Reset redirect flag
       setTimeout(() => {
         if (mountedRef.current) {
           redirectingRef.current = false
@@ -116,20 +138,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [router, pathname],
   )
 
-  // Initialize auth state and set up listeners
+  // Initialize auth state with proper error handling and timeouts
   useEffect(() => {
+    if (initializingRef.current) return
+
     console.log("[AuthContext] Initializing auth state")
     mountedRef.current = true
+    initializingRef.current = true
 
     const initAuth = async () => {
       try {
         setLoading(true)
+        setError(null)
 
-        // Get initial session
+        // Add timeout for session fetch
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Session fetch timeout")), 10000)
+        })
+
         const {
           data: { session },
           error: sessionError,
-        } = await supabase.auth.getSession()
+        } = await Promise.race([sessionPromise, timeoutPromise])
 
         if (sessionError) {
           console.error("[AuthContext] Session error:", sessionError)
@@ -154,8 +185,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setProfile(null)
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("[AuthContext] Error initializing auth:", error)
+        if (mountedRef.current) {
+          setError(error.message || "Authentication initialization failed")
+        }
       } finally {
         if (mountedRef.current) {
           setLoading(false)
@@ -165,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Set up auth state change listener
+    // Set up auth state change listener with error handling
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -173,31 +207,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!mountedRef.current) return
 
-      const currentUser = session?.user || null
+      try {
+        const currentUser = session?.user || null
 
-      if (event === "SIGNED_OUT") {
-        setUser(null)
-        setProfile(null)
-        setLoading(false)
-        lastRedirectRef.current = null
-        return
-      }
+        if (event === "SIGNED_OUT") {
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          setError(null)
+          lastRedirectRef.current = null
+          return
+        }
 
-      setUser(currentUser)
+        setUser(currentUser)
 
-      if (currentUser) {
-        // For sign up events, wait a bit for profile creation
-        if (event === "SIGNED_UP") {
-          console.log("[AuthContext] New signup detected, waiting for profile...")
-          // Wait for profile creation with retries
-          let retries = 0
-          const maxRetries = 5
+        if (currentUser) {
           let userProfile = null
 
-          while (retries < maxRetries && !userProfile && mountedRef.current) {
-            await new Promise((resolve) => setTimeout(resolve, 500))
+          if (event === "SIGNED_UP") {
+            console.log("[AuthContext] New signup detected, waiting for profile...")
+            // Retry logic for new signups
+            let retries = 0
+            const maxRetries = 5
+
+            while (retries < maxRetries && !userProfile && mountedRef.current) {
+              await new Promise((resolve) => setTimeout(resolve, 1000))
+              userProfile = await fetchProfile(currentUser.id)
+              retries++
+              console.log(`[AuthContext] Profile fetch attempt ${retries}`)
+            }
+          } else {
             userProfile = await fetchProfile(currentUser.id)
-            retries++
           }
 
           if (mountedRef.current) {
@@ -205,16 +245,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false)
           }
         } else {
-          const userProfile = await fetchProfile(currentUser.id)
-
           if (mountedRef.current) {
-            setProfile(userProfile)
+            setProfile(null)
             setLoading(false)
           }
         }
-      } else {
+      } catch (error: any) {
+        console.error("[AuthContext] Error in auth state change:", error)
         if (mountedRef.current) {
-          setProfile(null)
+          setError(error.message || "Authentication state change failed")
           setLoading(false)
         }
       }
@@ -225,13 +264,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mountedRef.current = false
+      initializingRef.current = false
       subscription.unsubscribe()
     }
   }, [fetchProfile])
 
-  // Handle redirects based on auth state
+  // Handle redirects with proper state checks
   useEffect(() => {
-    if (loading || !authChecked || redirectingRef.current) {
+    if (loading || !authChecked || redirectingRef.current || error) {
       return
     }
 
@@ -243,12 +283,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasUser: !!user,
       hasProfile: !!profile,
       userType: profile?.user_type,
+      loading,
+      authChecked,
     })
 
     if (user && profile) {
       // User is authenticated with profile
       if (isPublicPath) {
-        // Redirect from public pages to dashboard
         const dashboardPath = getDashboardPath(profile.user_type)
         safeRedirect(dashboardPath, "Authenticated user on public page")
       }
@@ -256,19 +297,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // No user and not on public page
       safeRedirect("/login", "Unauthenticated user on protected page")
     }
-  }, [user, profile, loading, authChecked, pathname, getDashboardPath, safeRedirect])
+  }, [user, profile, loading, authChecked, pathname, getDashboardPath, safeRedirect, error])
 
-  // Sign in function
+  // Sign in function with timeout and error handling
   const signIn = async (email: string, password: string, userTypeAttempt: Profile["user_type"]) => {
     console.log("[AuthContext] Attempting sign in:", email)
     setLoading(true)
+    setError(null)
 
     try {
-      // First attempt to sign in
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Add timeout for sign in
+      const signInPromise = supabase.auth.signInWithPassword({ email, password })
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sign in timeout")), 15000)
       })
+
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise])
 
       if (error) {
         console.error("[AuthContext] Sign in error:", error)
@@ -279,40 +323,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Sign in failed - no user returned")
       }
 
-      // Fetch profile to verify user type
+      // Verify user type
       const userProfile = await fetchProfile(data.user.id)
 
       if (!userProfile) {
-        // Sign out if profile doesn't exist
         await supabase.auth.signOut()
         throw new Error("User profile not found. Please contact support.")
       }
 
       if (userProfile.user_type !== userTypeAttempt) {
-        // Sign out if wrong user type
         await supabase.auth.signOut()
         throw new Error(`Incorrect user type. This account is registered as a ${userProfile.user_type}.`)
       }
 
-      // Success - let auth state listener handle the rest
       console.log("[AuthContext] Sign in successful")
+      // Auth state listener will handle the rest
     } catch (error: any) {
+      console.error("[AuthContext] Sign in failed:", error)
       setLoading(false)
+      setError(error.message || "Sign in failed")
       throw error
     }
   }
 
-  // Sign up function
+  // Sign up function with proper error handling
   const signUp = async (
     userData: Omit<Profile, "id" | "updated_at" | "avatar_url" | "username"> & { email: string; password: string },
   ) => {
     const { email, password, user_type, full_name, ...profileData } = userData
     console.log("[AuthContext] Attempting sign up:", email)
     setLoading(true)
+    setError(null)
 
     try {
-      // Create auth user
-      const { data, error } = await supabase.auth.signUp({
+      // Create auth user with timeout
+      const signUpPromise = supabase.auth.signUp({
         email,
         password,
         options: {
@@ -322,6 +367,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         },
       })
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sign up timeout")), 15000)
+      })
+
+      const { data, error } = await Promise.race([signUpPromise, timeoutPromise])
 
       if (error) {
         console.error("[AuthContext] Sign up error:", error)
@@ -334,17 +385,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[AuthContext] Auth user created:", data.user.id)
 
-      // Generate username from email with random suffix
+      // Create profile
       const username = email.split("@")[0] + Math.random().toString(36).substring(2, 7)
-
-      // Create role description for students
       let role_description = ""
+
       if (user_type === "student") {
         const studentProfile = profileData as any
         role_description = `${studentProfile.college_name} ${studentProfile.year_of_study} year ${studentProfile.degree}`
       }
 
-      // Create profile
       const newProfile = {
         id: data.user.id,
         email,
@@ -363,20 +412,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log("[AuthContext] Profile created successfully")
-
-      // Auth state listener will handle the rest
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[AuthContext] Sign up failed:", error)
       setLoading(false)
+      setError(error.message || "Sign up failed")
       throw error
     }
   }
 
-  // Sign out function
+  // Sign out function with proper cleanup
   const signOut = async () => {
     console.log("[AuthContext] Signing out")
+    setError(null)
 
     try {
-      setLoading(true)
       const { error } = await supabase.auth.signOut()
 
       if (error) {
@@ -387,16 +436,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear state immediately
       setUser(null)
       setProfile(null)
+      setLoading(false)
       lastRedirectRef.current = null
 
       console.log("[AuthContext] Sign out successful")
-
-      // Redirect to login
       safeRedirect("/login", "User signed out")
-    } catch (error) {
+    } catch (error: any) {
       console.error("[AuthContext] Sign out failed:", error)
-    } finally {
+      setError(error.message || "Sign out failed")
       setLoading(false)
+      throw error
     }
   }
 
@@ -407,10 +456,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         loading,
         authChecked,
+        error,
         signIn,
         signUp,
         signOut,
         refreshProfile,
+        clearError,
       }}
     >
       {children}

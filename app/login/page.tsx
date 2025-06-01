@@ -1,17 +1,17 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2, AlertCircle } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
-import type { Profile } from "@/types"
+import type { Profile } from "@/lib/supabase/types"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -19,8 +19,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [activeTab, setActiveTab] = useState<Profile["user_type"]>("student")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { signIn, loading: authLoading } = useAuth()
+  const { signIn, loading: authLoading, error: authError, clearError } = useAuth()
   const { toast } = useToast()
+
+  // Clear auth error when component mounts or when inputs change
+  useEffect(() => {
+    if (authError) {
+      clearError()
+    }
+  }, [email, password, activeTab, clearError])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,6 +38,10 @@ export default function LoginPage() {
         description: "Please enter both email and password.",
         variant: "destructive",
       })
+      return
+    }
+
+    if (isSubmitting || authLoading) {
       return
     }
 
@@ -80,21 +91,30 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
+          {authError && (
+            <div className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                <p className="text-sm text-red-800 dark:text-red-200">{authError}</p>
+              </div>
+            </div>
+          )}
+
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as Profile["user_type"])}
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-3 mb-6">
-              <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
+              <TabsTrigger value="student" className="flex items-center gap-1 text-xs" disabled={isLoading}>
                 <GraduationCap className="h-3 w-3" />
                 Student
               </TabsTrigger>
-              <TabsTrigger value="university" className="flex items-center gap-1 text-xs">
+              <TabsTrigger value="university" className="flex items-center gap-1 text-xs" disabled={isLoading}>
                 <Briefcase className="h-3 w-3" />
                 University
               </TabsTrigger>
-              <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
+              <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs" disabled={isLoading}>
                 <Building2 className="h-3 w-3" />
                 Corporate
               </TabsTrigger>
