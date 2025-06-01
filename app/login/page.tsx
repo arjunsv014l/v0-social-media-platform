@@ -23,18 +23,31 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!email.trim() || !password) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
-      await signIn(email, password)
+      console.log("LoginPage: Attempting login for:", email)
+      await signIn(email.trim(), password)
+
       toast({
         title: "Welcome back! 🎉",
         description: "You've successfully logged in.",
       })
     } catch (error: any) {
+      console.error("LoginPage: Login error:", error)
       toast({
-        title: "Error",
-        description: error.message || "Failed to sign in",
+        title: "Login Failed",
+        description: error.message || "Invalid email or password. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -106,6 +119,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -119,6 +133,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={loading}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
