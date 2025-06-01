@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -10,8 +10,8 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ui/use-toast"
-import { CreateEventDialog } from "@/components/create-event-dialog"
-import type { Event, Profile } from "@/lib/supabase/types"
+import { CreateEventDialog } from "@/components/create-event-dialog" // We'll create this
+import type { Event, Profile } from "@/lib/supabase/types" // Assuming types are defined
 
 interface EventWithAttendance extends Event {
   isAttending?: boolean
@@ -28,117 +28,63 @@ export default function EventsPage() {
   const [isCreateEventDialogOpen, setIsCreateEventDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<EventWithAttendance | null>(null)
 
-  // Refs to prevent infinite operations
-  const isFetchingRef = useRef(false)
-  const mountedRef = useRef(true)
-  const subscriptionRef = useRef<any>(null)
-
   const fetchEvents = useCallback(async () => {
-    // Prevent concurrent fetches
-    if (isFetchingRef.current) {
-      console.log("[Events] Fetch already in progress, skipping...")
+    setLoadingEvents(true)
+    const { data: eventsData, error: eventsError } = await supabase
+      .from("events")
+      .select("*, creator:profiles!creator_id(*)") // Fetch creator profile
+      .order("created_at", { ascending: false })
+
+    if (eventsError) {
+      console.error("Error fetching events:", eventsError)
+      toast({ title: "Error", description: "Could not load events.", variant: "destructive" })
+      setAllEvents([])
+      setLoadingEvents(false)
       return
     }
 
-    isFetchingRef.current = true
-    setLoadingEvents(true)
-
-    try {
-      console.log("[Events] Fetching events...")
-      const { data: eventsData, error: eventsError } = await supabase
-        .from("events")
-        .select("*, creator:profiles!creator_id(*)")
-        .order("created_at", { ascending: false })
-
-      if (eventsError) {
-        console.error("[Events] Error fetching events:", eventsError)
-        toast({ title: "Error", description: "Could not load events.", variant: "destructive" })
-        if (mountedRef.current) {
-          setAllEvents([])
-        }
-        return
-      }
-
-      if (!mountedRef.current) return
-
-      if (!user?.id) {
-        setAllEvents(eventsData?.map((e) => ({ ...e, creator: e.creator as Profile | null })) || [])
-        return
-      }
-
-      // Fetch attendance data
-      const { data: attendanceData, error: attendanceError } = await supabase
-        .from("event_attendees")
-        .select("event_id")
-        .eq("user_id", user.id)
-
-      if (attendanceError) {
-        console.error("[Events] Error fetching attendance:", attendanceError)
-      }
-
-      if (!mountedRef.current) return
-
-      const attendedIds = new Set(attendanceData?.map((a) => a.event_id) || [])
-      setMyEventIds(attendedIds)
-
-      const eventsWithAttendanceStatus =
-        eventsData?.map((event) => ({
-          ...event,
-          creator: event.creator as Profile | null,
-          isAttending: attendedIds.has(event.id),
-        })) || []
-
-      setAllEvents(eventsWithAttendanceStatus)
-      console.log("[Events] Events fetched successfully:", eventsWithAttendanceStatus.length)
-    } catch (error) {
-      console.error("[Events] Unexpected error:", error)
-      if (mountedRef.current) {
-        toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" })
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoadingEvents(false)
-      }
-      isFetchingRef.current = false
+    if (!user?.id) {
+      setAllEvents(eventsData.map((e) => ({ ...e, creator: e.creator as Profile | null })) || [])
+      setLoadingEvents(false)
+      return
     }
+
+    const { data: attendanceData, error: attendanceError } = await supabase
+      .from("event_attendees")
+      .select("event_id")
+      .eq("user_id", user.id)
+
+    if (attendanceError) {
+      console.error("Error fetching event attendance:", attendanceError)
+      // Continue without attendance data if it fails
+    }
+
+    const attendedIds = new Set(attendanceData?.map((a) => a.event_id) || [])
+    setMyEventIds(attendedIds)
+
+    const eventsWithAttendanceStatus = eventsData.map((event) => ({
+      ...event,
+      creator: event.creator as Profile | null,
+      isAttending: attendedIds.has(event.id),
+    }))
+
+    setAllEvents(eventsWithAttendanceStatus)
+    setLoadingEvents(false)
   }, [user?.id, toast])
 
-  // Initialize events and set up subscription
   useEffect(() => {
-    mountedRef.current = true
-
-    // Initial fetch
     fetchEvents()
 
-    // Set up real-time subscription with debouncing
-    let debounceTimeout: NodeJS.Timeout
-
-    const handleRealtimeChange = () => {
-      clearTimeout(debounceTimeout)
-      debounceTimeout = setTimeout(() => {
-        if (mountedRef.current && !isFetchingRef.current) {
-          console.log("[Events] Real-time change detected, refetching...")
-          fetchEvents()
-        }
-      }, 1000) // 1 second debounce
-    }
-
-    subscriptionRef.current = supabase
-      .channel("events-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, handleRealtimeChange)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendees" }, handleRealtimeChange)
+    const eventsChannel = supabase
+      .channel("realtime-events")
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, fetchEvents)
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendees" }, fetchEvents)
       .subscribe()
 
     return () => {
-      mountedRef.current = false
-      clearTimeout(debounceTimeout)
-      if (subscriptionRef.current) {
-        console.log("[Events] Cleaning up subscription")
-        supabase.removeChannel(subscriptionRef.current)
-        subscriptionRef.current = null
-      }
+      supabase.removeChannel(eventsChannel)
     }
-  }, []) // Empty dependency array to prevent re-subscription
+  }, [fetchEvents])
 
   const handleToggleAttendance = async (event: EventWithAttendance) => {
     if (!user?.id) {
@@ -149,80 +95,50 @@ export default function EventsPage() {
     const currentlyAttending = myEventIds.has(event.id)
     let newAttendeesCount = event.attendees_count || 0
 
-    try {
-      if (currentlyAttending) {
-        // Optimistically update UI
-        setMyEventIds((prev) => {
-          const newSet = new Set(prev)
-          newSet.delete(event.id)
-          return newSet
-        })
-        setAllEvents((prev) =>
-          prev.map((e) =>
-            e.id === event.id
-              ? { ...e, isAttending: false, attendees_count: Math.max(0, (e.attendees_count || 1) - 1) }
-              : e,
-          ),
-        )
-        newAttendeesCount = Math.max(0, newAttendeesCount - 1)
+    if (currentlyAttending) {
+      // Optimistically update UI
+      setMyEventIds((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(event.id)
+        return newSet
+      })
+      setAllEvents((prev) =>
+        prev.map((e) =>
+          e.id === event.id ? { ...e, isAttending: false, attendees_count: (e.attendees_count || 1) - 1 } : e,
+        ),
+      )
+      newAttendeesCount = Math.max(0, newAttendeesCount - 1)
 
-        const { error } = await supabase
-          .from("event_attendees")
-          .delete()
-          .match({ event_id: event.id, user_id: user.id })
-        if (error) {
-          toast({ title: "Error", description: "Failed to leave event.", variant: "destructive" })
-          // Revert optimistic update
-          setMyEventIds((prev) => new Set(prev).add(event.id))
-          setAllEvents((prev) =>
-            prev.map((e) =>
-              e.id === event.id ? { ...e, isAttending: true, attendees_count: (e.attendees_count || 0) + 1 } : e,
-            ),
-          )
-          return
-        }
-      } else {
-        // Optimistically update UI
-        setMyEventIds((prev) => new Set(prev).add(event.id))
-        setAllEvents((prev) =>
-          prev.map((e) =>
-            e.id === event.id ? { ...e, isAttending: true, attendees_count: (e.attendees_count || 0) + 1 } : e,
-          ),
-        )
-        newAttendeesCount = newAttendeesCount + 1
-
-        const { error } = await supabase.from("event_attendees").insert({ event_id: event.id, user_id: user.id })
-        if (error) {
-          toast({ title: "Error", description: "Failed to join event.", variant: "destructive" })
-          // Revert optimistic update
-          setMyEventIds((prev) => {
-            const newSet = new Set(prev)
-            newSet.delete(event.id)
-            return newSet
-          })
-          setAllEvents((prev) =>
-            prev.map((e) =>
-              e.id === event.id
-                ? { ...e, isAttending: false, attendees_count: Math.max(0, (e.attendees_count || 1) - 1) }
-                : e,
-            ),
-          )
-          return
-        }
+      const { error } = await supabase.from("event_attendees").delete().match({ event_id: event.id, user_id: user.id })
+      if (error) {
+        toast({ title: "Error", description: "Failed to leave event.", variant: "destructive" })
+        fetchEvents() // Revert optimistic update
       }
+    } else {
+      // Optimistically update UI
+      setMyEventIds((prev) => new Set(prev).add(event.id))
+      setAllEvents((prev) =>
+        prev.map((e) =>
+          e.id === event.id ? { ...e, isAttending: true, attendees_count: (e.attendees_count || 0) + 1 } : e,
+        ),
+      )
+      newAttendeesCount = newAttendeesCount + 1
 
-      // Update attendees count in events table
-      const { error: updateCountError } = await supabase
-        .from("events")
-        .update({ attendees_count: newAttendeesCount })
-        .eq("id", event.id)
-
-      if (updateCountError) {
-        console.error("[Events] Error updating attendees count:", updateCountError)
+      const { error } = await supabase.from("event_attendees").insert({ event_id: event.id, user_id: user.id })
+      if (error) {
+        toast({ title: "Error", description: "Failed to join event.", variant: "destructive" })
+        fetchEvents() // Revert optimistic update
       }
-    } catch (error) {
-      console.error("[Events] Error in handleToggleAttendance:", error)
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" })
+    }
+    // Update attendees_count in events table
+    const { error: updateCountError } = await supabase
+      .from("events")
+      .update({ attendees_count: newAttendeesCount })
+      .eq("id", event.id)
+
+    if (updateCountError) {
+      console.error("Error updating event attendees count:", updateCountError)
+      // Optionally handle this error, though the primary action (join/leave) might have succeeded
     }
   }
 
@@ -234,9 +150,7 @@ export default function EventsPage() {
   const myEvents = allEvents.filter((event) => myEventIds.has(event.id))
 
   const handleEventCreated = () => {
-    if (!isFetchingRef.current) {
-      fetchEvents()
-    }
+    fetchEvents() // Refresh events list after creation
   }
 
   const handleEditEvent = (event: EventWithAttendance) => {
@@ -263,7 +177,7 @@ export default function EventsPage() {
             <Button
               className="bg-gradient-to-r from-purple-500 to-pink-600"
               onClick={() => {
-                setEditingEvent(null)
+                setEditingEvent(null) // Clear editing event for new creation
                 setIsCreateEventDialogOpen(true)
               }}
             >
@@ -298,17 +212,10 @@ export default function EventsPage() {
 
               {loadingEvents ? (
                 <div className="flex justify-center items-center py-10">
-                  <div className="text-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Loading events...</p>
-                  </div>
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
                 </div>
               ) : filteredEvents.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  {selectedCategory === "all"
-                    ? "No events found."
-                    : `No events found for ${selectedCategory} category.`}
-                </div>
+                <div className="text-center py-10 text-muted-foreground">No events found for this category.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredEvents.map((event) => (
@@ -383,10 +290,7 @@ export default function EventsPage() {
             <TabsContent value="attending" className="space-y-6">
               {loadingEvents ? (
                 <div className="flex justify-center items-center py-10">
-                  <div className="text-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Loading your events...</p>
-                  </div>
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
                 </div>
               ) : myEvents.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">You are not attending any events yet.</div>

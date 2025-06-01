@@ -8,45 +8,39 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Building2 } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2, GraduationCap, Briefcase, Building2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
+import type { Profile } from "@/types"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("student")
-  const { signIn, loading } = useAuth()
+  const { signIn } = useAuth()
   const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!email || !password) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter both email and password.",
-        variant: "destructive",
-      })
-      return
-    }
+    setLoading(true)
 
     try {
-      console.log("[LoginPage] Attempting login for:", email)
-      await signIn(email, password)
-
+      const userTypeForLogin = activeTab as Profile["user_type"]
+      await signIn(email, password, userTypeForLogin)
       toast({
         title: "Welcome back! 🎉",
-        description: "You've successfully logged in. Redirecting to dashboard...",
+        description: "You've successfully logged in.",
       })
     } catch (error: any) {
-      console.error("[LoginPage] Login error:", error)
       toast({
-        title: "Login Failed",
-        description: error.message || "Failed to sign in. Please check your credentials.",
+        title: "Error",
+        description: error.message || "Failed to sign in",
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -73,10 +67,14 @@ export default function LoginPage() {
 
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
                 <GraduationCap className="h-3 w-3" />
                 Student
+              </TabsTrigger>
+              <TabsTrigger value="university" className="flex items-center gap-1 text-xs">
+                <Briefcase className="h-3 w-3" />
+                University
               </TabsTrigger>
               <TabsTrigger value="corporate" className="flex items-center gap-1 text-xs">
                 <Building2 className="h-3 w-3" />
@@ -90,6 +88,15 @@ export default function LoginPage() {
                 <GraduationCap className="h-6 w-6 text-white" />,
                 "Student Login",
                 "Access your campus network",
+              )}
+            </TabsContent>
+
+            <TabsContent value="university">
+              {getTabContent(
+                "university",
+                <Briefcase className="h-6 w-6 text-white" />,
+                "University Login",
+                "Access university administration tools",
               )}
             </TabsContent>
 
@@ -114,7 +121,6 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -128,7 +134,6 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={loading}
-                  autoComplete="current-password"
                 />
                 <Button
                   type="button"

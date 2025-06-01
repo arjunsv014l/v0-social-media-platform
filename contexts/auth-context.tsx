@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase/client"
@@ -11,391 +11,355 @@ interface AuthContextType {
   user: User | null
   profile: Profile | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, userData: any) => Promise<void>
+  authChecked: boolean
+  signIn: (email: string, password: string, userTypeAttempt: Profile["user_type"]) => Promise<void>
+  signUp: (
+    userData: Omit<Profile, "id" | "updated_at" | "avatar_url" | "username"> & { email: string; password?: string },
+  ) => Promise<void>
   signOut: () => Promise<void>
-  refreshProfile: () => Promise<void>
+  refreshProfile: () => Promise<Profile | null>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Define route configurations
-const publicPaths = ["/login", "/signup", "/forgot-password"]
-const profileCompletionPath = "/profile/complete"
+const publicPaths = ["/login", "/signup"]
 
-// Dashboard paths for different user types
-const getDashboardPath = (userType: Profile["user_type"]): string => {
-  switch (userType) {
-    case "student":
-      return "/"
-    case "professional":
-      return "/professional/dashboard"
-    case "corporate":
-      return "/corporate/dashboard"
-    case "university":
-      return "/university/dashboard"
-    default:
-      return "/"
-  }
-}
+// Define specific colleges
+const COLLEGES = ["SIMATS", "VIT", "SRM"] as const
+type CollegeName = (typeof COLLEGES)[number]
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [initialized, setInitialized] = useState(false)
-
+  const [authChecked, setAuthChecked] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
-  // Refs to prevent infinite operations
-  const mountedRef = useRef(true)
-  const lastRedirectRef = useRef<string | null>(null)
-  const isRedirectingRef = useRef(false)
-
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    console.log("AuthContext: Fetching profile for user ID:", userId)
     try {
-      console.log("[AuthContext] Fetching profile for user:", userId)
       const { data: profileData, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          console.log("[AuthContext] Profile not found for user:", userId)
-          return null
-        }
-        console.error("[AuthContext] Error fetching profile:", error)
+      if (error && error.code !== "PGRST116") {
+        console.error("AuthContext: Error fetching profile:", error)
         return null
       }
-
-      console.log("[AuthContext] Profile fetched successfully:", {
-        user_type: profileData.user_type,
-        is_profile_complete: profileData.is_profile_complete,
-      })
-
-      return profileData as Profile
+      console.log("AuthContext: Profile data fetched:", profileData)
+      return profileData as Profile | null
     } catch (error) {
-      console.error("[AuthContext] Exception in fetchProfile:", error)
+      console.error("AuthContext: Exception in fetchProfile:", error)
       return null
     }
   }, [])
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      console.log("[AuthContext] Refreshing profile...")
+      console.log("AuthContext: Refreshing profile for user:", user.id)
       const updatedProfile = await fetchProfile(user.id)
-      if (mountedRef.current) {
-        setProfile(updatedProfile)
-      }
+      setProfile(updatedProfile)
       return updatedProfile
     }
     return null
   }, [user?.id, fetchProfile])
 
-  // Perform redirect with safeguards
-  const performRedirect = useCallback(
-    (path: string, reason: string) => {
-      if (!mountedRef.current || isRedirectingRef.current || pathname === path || lastRedirectRef.current === path) {
-        console.log(`[AuthContext] Redirect to ${path} skipped - already redirecting or same path`)
-        return
-      }
+  const getDashboardPath = useCallback((userType?: Profile["user_type"]) => {
+    switch (userType) {
+      case "student":
+        return "/" // Student home feed
+      case "university":
+        return "/university/dashboard"
+      case "corporate":
+        return "/corporate/dashboard"
+      default:
+        console.warn("AuthContext: Unknown user type for dashboard path:", userType)
+        return "/"
+    }
+  }, [])
 
-      console.log(`[AuthContext] Redirecting to ${path} - ${reason}`)
-      isRedirectingRef.current = true
-      lastRedirectRef.current = path
-
-      router.replace(path)
-
-      // Reset redirect flag after delay
-      setTimeout(() => {
-        if (mountedRef.current) {
-          isRedirectingRef.current = false
-        }
-      }, 1000)
-    },
-    [router, pathname],
-  )
-
-  // Initialize auth state
   useEffect(() => {
+    console.log("AuthContext: Initializing auth state listener.")
     let mounted = true
 
     const initializeAuth = async () => {
       try {
-        console.log("[AuthContext] Initializing auth...")
-
         const {
           data: { session },
+          error: sessionError,
         } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error("AuthContext: Error getting session:", sessionError)
+        }
 
         if (!mounted) return
 
-        const currentUser = session?.user ?? null
-        console.log("[AuthContext] Initial session:", currentUser ? "User found" : "No user")
+        const activeUser = session?.user ?? null
+        setUser(activeUser)
+        console.log("AuthContext: Initial session user:", activeUser?.id)
 
-        setUser(currentUser)
-
-        if (currentUser) {
-          const userProfile = await fetchProfile(currentUser.id)
+        if (activeUser) {
+          const userProfile = await fetchProfile(activeUser.id)
           if (mounted) {
             setProfile(userProfile)
           }
         } else {
-          setProfile(null)
+          if (mounted) {
+            setProfile(null)
+          }
         }
       } catch (error) {
-        console.error("[AuthContext] Error in auth initialization:", error)
+        console.error("AuthContext: Error in initial auth setup:", error)
       } finally {
         if (mounted) {
           setLoading(false)
-          setInitialized(true)
-          console.log("[AuthContext] Auth initialization complete")
+          setAuthChecked(true)
+          console.log("AuthContext: Initial auth check complete")
         }
       }
     }
 
     initializeAuth()
 
-    // Set up auth state listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("AuthContext: Auth state changed. Event:", event, "Session User:", session?.user?.id)
+
       if (!mounted) return
 
-      console.log("[AuthContext] Auth state changed:", event, session?.user?.id)
+      const activeUser = session?.user ?? null
+      setUser(activeUser)
 
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-
-      if (currentUser) {
-        // For sign up events, wait a bit for profile creation
-        if (event === "SIGNED_UP") {
-          console.log("[AuthContext] New signup detected, waiting for profile...")
-          // Wait for profile creation with retries
-          let retries = 0
-          const maxRetries = 10
-          let userProfile = null
-
-          while (retries < maxRetries && !userProfile && mounted) {
-            await new Promise((resolve) => setTimeout(resolve, 500))
-            userProfile = await fetchProfile(currentUser.id)
-            retries++
-            console.log(`[AuthContext] Profile fetch attempt ${retries}:`, userProfile ? "Found" : "Not found")
-          }
-
-          if (mounted) {
-            setProfile(userProfile)
-            setLoading(false)
-          }
-        } else {
-          // For other events, fetch profile immediately
-          const userProfile = await fetchProfile(currentUser.id)
-          if (mounted) {
-            setProfile(userProfile)
-            setLoading(false)
-          }
+      if (activeUser) {
+        const userProfile = await fetchProfile(activeUser.id)
+        if (mounted) {
+          setProfile(userProfile)
         }
       } else {
         if (mounted) {
           setProfile(null)
-          setLoading(false)
-          lastRedirectRef.current = null
-          isRedirectingRef.current = false
         }
+      }
+
+      if (mounted) {
+        setLoading(false)
+        setAuthChecked(true)
       }
     })
 
     return () => {
       mounted = false
-      mountedRef.current = false
       subscription.unsubscribe()
     }
   }, [fetchProfile])
 
-  // Handle redirections
   useEffect(() => {
-    if (!initialized || loading || isRedirectingRef.current) {
+    if (loading || !authChecked) {
+      console.log("AuthContext: Redirect check skipped - loading or auth not checked.", { loading, authChecked })
       return
     }
 
-    const isPublicPath = publicPaths.includes(pathname)
-    const isProfileCompletePage = pathname === profileCompletionPath
+    const isAuthPage = publicPaths.includes(pathname)
 
-    console.log("[AuthContext] Evaluating redirections:", {
+    console.log("AuthContext: Evaluating redirection...", {
       pathname,
       user: !!user,
-      profile: profile ? { type: profile.user_type, complete: profile.is_profile_complete } : null,
-      isPublicPath,
-      isProfileCompletePage,
-      loading,
-      initialized,
+      profile: !!profile,
+      userType: profile?.user_type,
+      isAuthPage,
     })
 
-    // No user - redirect to login unless on public pages
-    if (!user) {
-      if (!isPublicPath) {
-        performRedirect("/login", "No user authenticated")
+    if (user && profile) {
+      // User is logged in AND profile is loaded
+      const dashboardPath = getDashboardPath(profile.user_type)
+      if (isAuthPage) {
+        console.log("AuthContext: User logged in, on auth page. Redirecting to dashboard:", dashboardPath)
+        router.push(dashboardPath)
+      } else {
+        // Optional: Ensure user is on their correct dashboard type if already logged in
+        const currentPathBase = pathname.split("/")[1] // e.g. "university" from "/university/dashboard"
+        const targetPathBase = dashboardPath.split("/")[1]
+
+        if (
+          dashboardPath !== "/" &&
+          currentPathBase !== targetPathBase &&
+          profile.user_type &&
+          !pathname.startsWith("/api")
+        ) {
+          // If not on home, and not on the correct dashboard base, and not an API route
+          if (
+            (profile.user_type === "university" && currentPathBase !== "university") ||
+            (profile.user_type === "corporate" && currentPathBase !== "corporate") ||
+            (profile.user_type === "student" &&
+              dashboardPath === "/" &&
+              currentPathBase !== "" &&
+              currentPathBase !== "profile" &&
+              currentPathBase !== "settings" &&
+              currentPathBase !== "messages" &&
+              currentPathBase !== "friends" &&
+              currentPathBase !== "events" &&
+              currentPathBase !== "courses" &&
+              currentPathBase !== "create") // Student can be on root or other allowed pages
+          ) {
+            console.log(
+              `AuthContext: User on wrong page type (${pathname}) for role ${profile.user_type}, redirecting to ${dashboardPath}`,
+            )
+            router.push(dashboardPath)
+          }
+        }
+        console.log("AuthContext: User logged in. On a valid page or their dashboard:", pathname)
       }
-      return
-    }
-
-    // User exists but no profile - redirect to login (profile creation failed)
-    if (!profile) {
-      console.log("[AuthContext] User exists but no profile found, redirecting to login")
-      performRedirect("/login", "Profile not found")
-      return
-    }
-
-    // User and profile exist - handle redirections based on profile state
-    const needsCompletion = profile.is_profile_complete !== true
-    const dashboardPath = getDashboardPath(profile.user_type)
-
-    if (needsCompletion) {
-      // Profile incomplete - redirect to completion page
-      if (!isProfileCompletePage) {
-        performRedirect(profileCompletionPath, "Profile needs completion")
-      }
-    } else {
-      // Profile complete - redirect away from auth/completion pages to dashboard
-      if (isPublicPath || isProfileCompletePage) {
-        performRedirect(dashboardPath, "Redirecting to dashboard")
+    } else if (!user) {
+      // No user (logged out)
+      if (!isAuthPage) {
+        console.log("AuthContext: No user. Not on public page. Redirecting to /login")
+        router.push("/login")
+      } else {
+        console.log("AuthContext: No user. On a public page.")
       }
     }
-  }, [initialized, loading, user, profile, pathname, performRedirect])
+    // If user is logged in but profile is still null (e.g. during initial load after login), wait for profile.
+  }, [user, profile, loading, authChecked, pathname, router, getDashboardPath])
 
-  const signIn = async (email: string, password: string) => {
-    console.log("[AuthContext] Starting sign in process...")
+  const signIn = async (email: string, password: string, userTypeAttempt: Profile["user_type"]) => {
+    console.log("AuthContext: Attempting sign in for:", email, "as", userTypeAttempt)
     setLoading(true)
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      // Check if profile exists with correct user type
+      const { data: existingProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_type")
+        .eq("email", email)
+        .single()
 
-      if (error) {
-        console.error("[AuthContext] Sign in error:", error)
-        throw error
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("AuthContext: Error fetching profile for sign-in check:", profileError)
+        throw new Error("Failed to verify user type. Please try again.")
       }
 
-      console.log("[AuthContext] Sign in successful, user:", data.user?.id)
+      if (!existingProfile) {
+        throw new Error("User not found. Please check your email or sign up.")
+      }
 
-      // Don't set loading to false here - let the auth state change handle it
+      if (existingProfile.user_type !== userTypeAttempt) {
+        throw new Error(`Incorrect user type selected. This email is registered as a ${existingProfile.user_type}.`)
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        console.error("AuthContext: Sign in error:", signInError)
+        throw signInError
+      }
+      console.log("AuthContext: Sign in successful")
+      // Don't set loading to false here - let onAuthStateChange handle it
     } catch (error) {
-      console.error("[AuthContext] Sign in failed:", error)
       setLoading(false)
       throw error
     }
   }
 
-  const signUp = async (email: string, password: string, userData: any) => {
-    console.log("[AuthContext] Starting sign up process...")
+  const signUp = async (
+    userDataWithAuth: Omit<Profile, "id" | "updated_at" | "avatar_url" | "username"> & {
+      email: string
+      password?: string
+    },
+  ) => {
+    const { email, password, user_type, full_name, ...profileData } = userDataWithAuth
+    console.log("AuthContext: Attempting sign up for:", email, "as", user_type)
     setLoading(true)
 
+    if (!password) {
+      setLoading(false)
+      throw new Error("Password is required for signup.")
+    }
+
     try {
-      // Step 1: Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: `${userData.firstName} ${userData.lastName}`,
-            user_type: userData.userType,
-          },
-        },
       })
 
-      if (authError) {
-        console.error("[AuthContext] Auth signup error:", authError)
-        throw authError
+      if (signUpError) {
+        console.error("AuthContext: Supabase sign up error:", signUpError)
+        throw signUpError
       }
 
       if (!authData.user) {
-        throw new Error("Sign up failed - no user returned")
+        console.error("AuthContext: Supabase sign up did not return a user.")
+        throw new Error("Sign up failed. Please try again.")
       }
 
-      console.log("[AuthContext] Auth user created:", authData.user.id)
+      console.log("AuthContext: Supabase sign up successful. User ID:", authData.user.id)
 
-      // Step 2: Create profile
-      const profileToInsert: Partial<Profile> & { id: string; user_type: Profile["user_type"] } = {
+      let role_description = ""
+      if (user_type === "student") {
+        const studentProfile = profileData as Pick<Profile, "college_name" | "year_of_study" | "degree">
+        if (!studentProfile.college_name || !studentProfile.year_of_study || !studentProfile.degree) {
+          throw new Error("Missing college, year, or degree for student signup.")
+        }
+        role_description = `${studentProfile.college_name} ${studentProfile.year_of_study} year ${studentProfile.degree}`
+      }
+
+      const newProfile: Omit<Profile, "updated_at" | "avatar_url"> & { id: string } = {
         id: authData.user.id,
-        full_name: `${userData.firstName} ${userData.lastName}`,
-        username: userData.username || email.split("@")[0] + Math.random().toString(36).substring(2, 7),
-        user_type: userData.userType,
-        is_profile_complete: false,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        // Add user-type specific fields
-        ...(userData.userType === "student" && {
-          university: userData.university,
-          major: userData.major,
-          graduation_year: userData.graduationYear,
-          student_id_number: userData.studentId,
-        }),
-        ...(userData.userType === "professional" && {
-          company: userData.company,
-          position: userData.position,
-          experience_years: userData.experienceYears,
-          industry: userData.industry,
-        }),
-        ...(userData.userType === "corporate" && {
-          company: userData.company,
-          industry: userData.industry,
-          company_size: userData.companySize,
-        }),
+        email: authData.user.email, // Store email in profile for easier access
+        username: email.split("@")[0] + Math.random().toString(36).substring(2, 7), // Basic unique username
+        full_name,
+        user_type,
+        ...profileData,
+        ...(user_type === "student" && { role_description }),
       }
 
-      const { error: profileError } = await supabase.from("profiles").insert(profileToInsert as Profile)
+      const { error: profileInsertError } = await supabase.from("profiles").insert(newProfile)
 
-      if (profileError) {
-        console.error("[AuthContext] Profile creation error:", profileError)
-        throw new Error(`Failed to create profile: ${profileError.message}`)
+      if (profileInsertError) {
+        console.error("AuthContext: Error inserting profile:", profileInsertError)
+        // Potentially try to delete the auth user if profile insert fails to avoid orphaned auth user
+        // await supabase.auth.admin.deleteUser(authData.user.id) // Requires admin privileges
+        throw new Error("Failed to create user profile. Please try again.")
       }
 
-      console.log("[AuthContext] Profile created successfully")
-
-      // Don't set loading to false here - let the auth state change handle it
+      console.log("AuthContext: Profile successfully inserted for new user.")
+      // onAuthStateChange will handle setting user and profile state, then redirection effect will run.
+      // No explicit router.push here, let the effects handle it.
     } catch (error) {
-      console.error("[AuthContext] Sign up failed:", error)
-      setLoading(false)
+      setLoading(false) // Ensure loading is false on any error during sign-up
       throw error
     }
+    // setLoading(false) will be handled by onAuthStateChange or its finally block after successful profile insert
   }
 
   const signOut = async () => {
-    console.log("[AuthContext] Starting sign out...")
-    setLoading(true)
-
+    console.log("AuthContext: Signing out.")
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
 
-      // Reset state
+      // Clear state immediately
       setUser(null)
       setProfile(null)
-      lastRedirectRef.current = null
-      isRedirectingRef.current = false
-
-      console.log("[AuthContext] Sign out successful")
-    } catch (error) {
-      console.error("[AuthContext] Sign out error:", error)
-      throw error
-    } finally {
       setLoading(false)
+      setAuthChecked(true)
+
+      console.log("AuthContext: Sign out successful")
+    } catch (error) {
+      console.error("AuthContext: Sign out error:", error)
+      setLoading(false)
+      throw error
     }
   }
 
+  console.log("AuthContext Provider rendering. State:", {
+    user: user?.id,
+    profile: !!profile,
+    loading,
+    authChecked,
+    pathname,
+  })
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        refreshProfile,
-      }}
-    >
+    <AuthContext.Provider value={{ user, profile, loading, authChecked, signIn, signUp, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

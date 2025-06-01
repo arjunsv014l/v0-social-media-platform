@@ -1,272 +1,209 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
-import { useAuth } from "@/contexts/auth-context"
-import { supabase } from "@/lib/supabase/client"
-import PostCard from "@/components/post-card"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { BellIcon, MessageSquareIcon, PlusIcon, SearchIcon, Loader2 } from "lucide-react"
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import NewPostCard from "@/components/new-post-card"
+import PostCard from "@/components/post-card"
 import TrendingSidebar from "@/components/trending-sidebar"
-import { Loader2 } from "lucide-react"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
+import { useAuth } from "@/contexts/auth-context"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase/client"
+import type { PostWithAuthor } from "@/lib/supabase/types"
 
-interface Post {
-  id: string
-  content: string
-  image_url?: string
-  video_url?: string
-  created_at: string
-  user_id: string
-  likes_count: number
-  comments_count: number
-  shares_count: number
-  profiles: {
-    id: string
-    username: string
-    full_name: string
-    avatar_url?: string
-  }
-  user_has_liked: boolean
-}
+import { CreatePostDialog } from "@/components/create-post-dialog"
+import { SearchDialog } from "@/components/search-dialog"
+import { NotificationsPopover } from "@/components/notifications-popover" // Updated import
 
-export default function HomePage() {
-  const { user, profile } = useAuth()
-  const [posts, setPosts] = useState<Post[]>([])
+export default function Home() {
+  const { user, profile, loading: authLoading, authChecked } = useAuth()
+  const [posts, setPosts] = useState<PostWithAuthor[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const mountedRef = useRef(true)
-  const fetchingRef = useRef(false)
 
-  const fetchPosts = useCallback(async () => {
-    if (fetchingRef.current || !user) return
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
 
-    fetchingRef.current = true
-    console.log("HomePage: Fetching posts...")
+  useEffect(() => {
+    // Only fetch posts if auth is checked and we have a user
+    if (!authChecked || !user) {
+      setLoadingPosts(false)
+      return
+    }
 
-    try {
-      const { data: postsData, error: postsError } = await supabase
+    const fetchPosts = async () => {
+      setLoadingPosts(true)
+      const { data, error } = await supabase
         .from("posts")
         .select(`
           *,
-          profiles:user_id (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
+          author:profiles!user_id(*)
         `)
         .order("created_at", { ascending: false })
         .limit(20)
 
-      if (postsError) {
-        console.error("HomePage: Error fetching posts:", postsError)
-        throw postsError
+      if (error) {
+        console.error("Error fetching posts:", error)
+        setPosts([])
+      } else {
+        setPosts((data as PostWithAuthor[]) || [])
       }
-
-      if (!mountedRef.current) return
-
-      // Get likes for current user
-      const postIds = postsData?.map((post) => post.id) || []
-      const { data: likesData } = await supabase
-        .from("post_likes")
-        .select("post_id")
-        .eq("user_id", user.id)
-        .in("post_id", postIds)
-
-      const likedPostIds = new Set(likesData?.map((like) => like.post_id) || [])
-
-      // Get comments count for each post
-      const { data: commentsData } = await supabase.from("post_comments").select("post_id").in("post_id", postIds)
-
-      const commentsCount =
-        commentsData?.reduce(
-          (acc, comment) => {
-            acc[comment.post_id] = (acc[comment.post_id] || 0) + 1
-            return acc
-          },
-          {} as Record<string, number>,
-        ) || {}
-
-      // Get likes count for each post
-      const { data: allLikesData } = await supabase.from("post_likes").select("post_id").in("post_id", postIds)
-
-      const likesCount =
-        allLikesData?.reduce(
-          (acc, like) => {
-            acc[like.post_id] = (acc[like.post_id] || 0) + 1
-            return acc
-          },
-          {} as Record<string, number>,
-        ) || {}
-
-      const postsWithInteractions =
-        postsData?.map((post) => ({
-          ...post,
-          user_has_liked: likedPostIds.has(post.id),
-          comments_count: commentsCount[post.id] || 0,
-          likes_count: likesCount[post.id] || 0,
-          shares_count: 0, // TODO: Implement shares functionality
-        })) || []
-
-      if (mountedRef.current) {
-        setPosts(postsWithInteractions)
-        setError(null)
-        console.log("HomePage: Posts loaded successfully:", postsWithInteractions.length)
-      }
-    } catch (error: any) {
-      console.error("HomePage: Error in fetchPosts:", error)
-      if (mountedRef.current) {
-        setError(error.message || "Failed to load posts")
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoadingPosts(false)
-      }
-      fetchingRef.current = false
-    }
-  }, [user])
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    if (user) {
-      fetchPosts()
+      setLoadingPosts(false)
     }
 
-    return () => {
-      mountedRef.current = false
-    }
-  }, [user, fetchPosts])
+    fetchPosts()
 
-  // Set up real-time subscriptions
-  useEffect(() => {
-    if (!user) return
-
-    console.log("HomePage: Setting up real-time subscriptions")
-
-    const postsChannel = supabase
-      .channel("posts-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, (payload) => {
-        console.log("HomePage: Posts change detected:", payload.eventType)
-
-        // Debounce the fetch to avoid rapid-fire updates
-        setTimeout(() => {
-          if (mountedRef.current && !fetchingRef.current) {
-            fetchPosts()
+    const postChannel = supabase
+      .channel("realtime-posts-home")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        const fetchNewPost = async () => {
+          const { data: newPostData, error: newPostError } = await supabase
+            .from("posts")
+            .select(`*, author:profiles!user_id(*)`)
+            .eq("id", payload.new.id)
+            .single()
+          if (newPostError) {
+            console.error("Error fetching new post:", newPostError)
+          } else if (newPostData) {
+            setPosts((currentPosts) => [newPostData as PostWithAuthor, ...currentPosts])
           }
-        }, 1000)
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, (payload) => {
-        console.log("HomePage: Post likes change detected:", payload.eventType)
-
-        // Update likes count locally for better UX
-        if (payload.eventType === "INSERT" && payload.new) {
-          setPosts((prev) =>
-            prev.map((post) =>
-              post.id === payload.new.post_id
-                ? {
-                    ...post,
-                    likes_count: post.likes_count + 1,
-                    user_has_liked: payload.new.user_id === user.id ? true : post.user_has_liked,
-                  }
-                : post,
-            ),
-          )
-        } else if (payload.eventType === "DELETE" && payload.old) {
-          setPosts((prev) =>
-            prev.map((post) =>
-              post.id === payload.old.post_id
-                ? {
-                    ...post,
-                    likes_count: Math.max(0, post.likes_count - 1),
-                    user_has_liked: payload.old.user_id === user.id ? false : post.user_has_liked,
-                  }
-                : post,
-            ),
-          )
         }
+        fetchNewPost()
       })
       .subscribe()
 
     return () => {
-      console.log("HomePage: Cleaning up subscriptions")
-      supabase.removeChannel(postsChannel)
+      supabase.removeChannel(postChannel)
     }
-  }, [user, fetchPosts])
+  }, [user, authChecked])
 
-  if (!user) {
+  // Show loading only if auth is still being checked
+  if (!authChecked || (authLoading && !user)) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading your feed...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>Home Feed</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+    <SidebarInset>
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="md:hidden" />
+          <div className="hidden md:block">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Home Feed 🏠
+            </h1>
+          </div>
+        </div>
+        <div className="relative hidden md:block">
+          <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="search"
+            placeholder="Search posts, people, events..."
+            className="h-9 w-64 rounded-full border border-input bg-background pl-8 pr-4 text-sm focus:outline-none"
+            onFocus={() => setIsSearchOpen(true)}
+            readOnly
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="ghost" onClick={() => setIsSearchOpen(true)} className="md:hidden">
+            <SearchIcon className="h-5 w-5" />
+            <span className="sr-only">Search</span>
+          </Button>
+
+          {user && ( // Only show notifications if user is logged in
+            <NotificationsPopover open={isNotificationsPopoverOpen} onOpenChange={setIsNotificationsPopoverOpen}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="relative"
+                // onClick is handled by PopoverTrigger now
+              >
+                <BellIcon className="h-5 w-5" />
+                {/* Badge count can be fetched here or from a context if needed globally in header */}
+                <span className="sr-only">Notifications</span>
+              </Button>
+            </NotificationsPopover>
+          )}
+
+          {user && ( // Only show messages link if user is logged in
+            <Link href="/messages">
+              <Button size="icon" variant="ghost" className="relative">
+                <MessageSquareIcon className="h-5 w-5" />
+                <span className="sr-only">Messages</span>
+              </Button>
+            </Link>
+          )}
+
+          {user && ( // Only show create post button if user is logged in
+            <Button
+              size="icon"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 md:hidden"
+              onClick={() => setIsCreatePostOpen(true)}
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span className="sr-only">New post</span>
+            </Button>
+          )}
+
+          <div className="flex items-center gap-2">
+            {user && profile ? ( // Check for profile as well
+              <Link href="/profile">
+                <Button size="sm" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <img
+                    src={profile.avatar_url || "/placeholder.svg?height=36&width=36&query=student profile"}
+                    alt={profile.full_name || "Profile"}
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-background" />
+                  <span className="sr-only">Profile</span>
+                </Button>
+              </Link>
+            ) : !user && !authLoading ? ( // Show login only if not loading and no user
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="hidden md:flex">
+                  Login
+                </Button>
+              </Link>
+            ) : null}
+          </div>
+        </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="container mx-auto max-w-2xl p-4 space-y-6">
-            {profile && <NewPostCard />}
-
+      <main className="flex-1 p-4">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            {user && <NewPostCard />}
             {loadingPosts ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">Loading posts...</p>
-                </div>
+              <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-            ) : error ? (
-              <div className="text-center py-8">
-                <p className="text-red-500 mb-4">{error}</p>
-                <button
-                  onClick={() => {
-                    setError(null)
-                    setLoadingPosts(true)
-                    fetchPosts()
-                  }}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
+            ) : posts.length > 0 ? (
+              <div className="space-y-4">
+                {posts.map((post) => (
+                  <PostCard key={post.id} post={post} author={post.author} />
+                ))}
               </div>
             ) : (
-              <div className="space-y-6">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} author={post.profiles} />
-                ))}
+              <div className="text-center py-8 text-muted-foreground">
+                No posts yet. Be the first to share something or follow others!
               </div>
             )}
           </div>
+          <div className="hidden lg:block">
+            <TrendingSidebar />
+          </div>
         </div>
-
-        {/* Trending Sidebar - Hidden on mobile */}
-        <div className="hidden lg:block w-80 border-l">
-          <TrendingSidebar />
-        </div>
-      </div>
-    </div>
+      </main>
+      <CreatePostDialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
+      <SearchDialog open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+      {/* NotificationsPopover is now triggered by its child button in the header */}
+    </SidebarInset>
   )
 }
