@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Building2, GraduationCap, Briefcase } from "lucide-react"
 import StudentSignupForm from "@/components/auth/student-signup-form"
-import UniversitySignupForm from "@/components/auth/university-signup-form"
+import ProfessionalSignupForm from "@/components/auth/professional-signup-form"
 import CorporateSignupForm from "@/components/auth/corporate-signup-form"
 
 export default function SignupPage() {
@@ -36,7 +36,7 @@ export default function SignupPage() {
               </TabsTrigger>
               <TabsTrigger value="professional" className="flex items-center gap-2">
                 <Briefcase className="h-4 w-4" />
-                University
+                Professional
               </TabsTrigger>
               <TabsTrigger value="corporate" className="flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
@@ -54,10 +54,10 @@ export default function SignupPage() {
 
             <TabsContent value="professional">
               <div className="text-center mb-6">
-                <h3 className="text-xl font-semibold text-green-600">University Registration</h3>
-                <p className="text-muted-foreground">Manage students, courses, and institutional presence.</p>
+                <h3 className="text-xl font-semibold text-green-600">Professional Registration</h3>
+                <p className="text-muted-foreground">Share expertise, mentor students, and expand your network</p>
               </div>
-              <UniversitySignupForm />
+              <ProfessionalSignupForm />
             </TabsContent>
 
             <TabsContent value="corporate">

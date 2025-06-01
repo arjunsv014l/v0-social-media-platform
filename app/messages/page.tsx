@@ -13,8 +13,8 @@ import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/components/ui/use-toast"
 
 interface Conversation {
-  id: string // This will be the other user's profile ID
-  profile: any // Profile of the other user
+  id: string
+  profile: any
   lastMessage?: any
   unreadCount?: number
 }
@@ -25,7 +25,7 @@ interface Message {
   receiver_id: string
   content: string
   created_at: string
-  isMe?: boolean // Helper to determine if message is from current user
+  isMe?: boolean
 }
 
 export default function MessagesPage() {
@@ -41,6 +41,11 @@ export default function MessagesPage() {
   const [sendingMessage, setSendingMessage] = useState(false)
   const messagesEndRef = useRef<null | HTMLDivElement>(null)
 
+  // Refs to prevent infinite operations
+  const mountedRef = useRef(true)
+  const conversationsSubscriptionRef = useRef<any>(null)
+  const chatSubscriptionRef = useRef<any>(null)
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
@@ -53,92 +58,107 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!user?.id) return
 
+    mountedRef.current = true
+
     const fetchConversations = async () => {
+      if (!mountedRef.current) return
+
       setLoadingConversations(true)
-      // Get distinct user IDs the current user has messaged or received messages from
-      const { data: messagePeers, error: peersError } = await supabase.rpc("get_message_peers", {
-        p_user_id: user.id,
-      })
+      try {
+        // Get distinct user IDs the current user has messaged or received messages from
+        const { data: messagePeers, error: peersError } = await supabase.rpc("get_message_peers", {
+          p_user_id: user.id,
+        })
 
-      if (peersError) {
-        console.error("Error fetching message peers:", peersError)
-        toast({ title: "Error", description: "Could not load conversations.", variant: "destructive" })
-        setLoadingConversations(false)
-        return
-      }
-
-      if (!messagePeers || messagePeers.length === 0) {
-        setConversations([])
-        setLoadingConversations(false)
-        return
-      }
-
-      const peerIds = messagePeers.map((p: any) => p.peer_id)
-
-      // Fetch profiles for these peers
-      const { data: profiles, error: profilesError } = await supabase.from("profiles").select("*").in("id", peerIds)
-
-      if (profilesError) {
-        console.error("Error fetching peer profiles:", profilesError)
-        setLoadingConversations(false)
-        return
-      }
-
-      // For each peer, get the last message and unread count
-      const convPromises = profiles.map(async (peerProfile) => {
-        const { data: lastMsgData, error: lastMsgError } = await supabase
-          .from("messages")
-          .select("*")
-          .or(
-            `(sender_id.eq.${user.id},receiver_id.eq.${peerProfile.id}),(sender_id.eq.${peerProfile.id},receiver_id.eq.${user.id})`,
-          )
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single()
-
-        const { count: unreadCount, error: unreadError } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("sender_id", peerProfile.id)
-          .eq("receiver_id", user.id)
-          .eq("read", false)
-
-        return {
-          id: peerProfile.id,
-          profile: peerProfile,
-          lastMessage: lastMsgError ? null : lastMsgData,
-          unreadCount: unreadError ? 0 : unreadCount || 0,
+        if (peersError) {
+          console.error("Error fetching message peers:", peersError)
+          toast({ title: "Error", description: "Could not load conversations.", variant: "destructive" })
+          return
         }
-      })
 
-      const fetchedConversations = await Promise.all(convPromises)
-      // Sort conversations by last message timestamp
-      fetchedConversations.sort((a, b) => {
-        if (!a.lastMessage) return 1
-        if (!b.lastMessage) return -1
-        return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
-      })
+        if (!messagePeers || messagePeers.length === 0) {
+          if (mountedRef.current) {
+            setConversations([])
+          }
+          return
+        }
 
-      setConversations(fetchedConversations)
-      setLoadingConversations(false)
+        const peerIds = messagePeers.map((p: any) => p.peer_id)
+
+        // Fetch profiles for these peers
+        const { data: profiles, error: profilesError } = await supabase.from("profiles").select("*").in("id", peerIds)
+
+        if (profilesError) {
+          console.error("Error fetching peer profiles:", profilesError)
+          return
+        }
+
+        // For each peer, get the last message and unread count
+        const convPromises = profiles.map(async (peerProfile) => {
+          const { data: lastMsgData, error: lastMsgError } = await supabase
+            .from("messages")
+            .select("*")
+            .or(
+              `(sender_id.eq.${user.id},receiver_id.eq.${peerProfile.id}),(sender_id.eq.${peerProfile.id},receiver_id.eq.${user.id})`,
+            )
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single()
+
+          const { count: unreadCount, error: unreadError } = await supabase
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("sender_id", peerProfile.id)
+            .eq("receiver_id", user.id)
+            .eq("read", false)
+
+          return {
+            id: peerProfile.id,
+            profile: peerProfile,
+            lastMessage: lastMsgError ? null : lastMsgData,
+            unreadCount: unreadError ? 0 : unreadCount || 0,
+          }
+        })
+
+        const fetchedConversations = await Promise.all(convPromises)
+        // Sort conversations by last message timestamp
+        fetchedConversations.sort((a, b) => {
+          if (!a.lastMessage) return 1
+          if (!b.lastMessage) return -1
+          return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+        })
+
+        if (mountedRef.current) {
+          setConversations(fetchedConversations)
+        }
+      } catch (error) {
+        console.error("Error in fetchConversations:", error)
+      } finally {
+        if (mountedRef.current) {
+          setLoadingConversations(false)
+        }
+      }
     }
 
     fetchConversations()
 
     // Real-time subscription for new messages affecting conversation list
-    const messagesSubscription = supabase
+    conversationsSubscriptionRef.current = supabase
       .channel("public:messages:conversations")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        // Check if the new message involves the current user
         const newMessage = payload.new as Message
         if (newMessage.sender_id === user.id || newMessage.receiver_id === user.id) {
-          fetchConversations() // Re-fetch conversations to update last message and order
+          fetchConversations()
         }
       })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(messagesSubscription)
+      mountedRef.current = false
+      if (conversationsSubscriptionRef.current) {
+        supabase.removeChannel(conversationsSubscriptionRef.current)
+        conversationsSubscriptionRef.current = null
+      }
     }
   }, [user?.id, toast])
 
@@ -150,39 +170,53 @@ export default function MessagesPage() {
     }
 
     const fetchMessages = async () => {
-      setLoadingMessages(true)
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(
-          `(sender_id.eq.${user.id},receiver_id.eq.${selectedChat.id}),(sender_id.eq.${selectedChat.id},receiver_id.eq.${user.id})`,
-        )
-        .order("created_at", { ascending: true })
+      if (!mountedRef.current) return
 
-      if (error) {
-        console.error("Error fetching messages:", error)
-        toast({ title: "Error", description: "Could not load messages.", variant: "destructive" })
-      } else {
-        setMessages(data.map((m) => ({ ...m, isMe: m.sender_id === user.id })))
-        // Mark messages as read
-        await supabase
+      setLoadingMessages(true)
+      try {
+        const { data, error } = await supabase
           .from("messages")
-          .update({ read: true })
-          .eq("sender_id", selectedChat.id)
-          .eq("receiver_id", user.id)
-          .eq("read", false)
-        // Optimistically update unread count in conversation list
-        setConversations((prev) =>
-          prev.map((conv) => (conv.id === selectedChat.id ? { ...conv, unreadCount: 0 } : conv)),
-        )
+          .select("*")
+          .or(
+            `(sender_id.eq.${user.id},receiver_id.eq.${selectedChat.id}),(sender_id.eq.${selectedChat.id},receiver_id.eq.${user.id})`,
+          )
+          .order("created_at", { ascending: true })
+
+        if (error) {
+          console.error("Error fetching messages:", error)
+          toast({ title: "Error", description: "Could not load messages.", variant: "destructive" })
+        } else if (mountedRef.current) {
+          setMessages(data.map((m) => ({ ...m, isMe: m.sender_id === user.id })))
+          // Mark messages as read
+          await supabase
+            .from("messages")
+            .update({ read: true })
+            .eq("sender_id", selectedChat.id)
+            .eq("receiver_id", user.id)
+            .eq("read", false)
+          // Update unread count in conversation list
+          setConversations((prev) =>
+            prev.map((conv) => (conv.id === selectedChat.id ? { ...conv, unreadCount: 0 } : conv)),
+          )
+        }
+      } catch (error) {
+        console.error("Error in fetchMessages:", error)
+      } finally {
+        if (mountedRef.current) {
+          setLoadingMessages(false)
+        }
       }
-      setLoadingMessages(false)
     }
 
     fetchMessages()
 
+    // Clean up previous chat subscription
+    if (chatSubscriptionRef.current) {
+      supabase.removeChannel(chatSubscriptionRef.current)
+    }
+
     // Real-time subscription for messages in the current chat
-    const chatSubscription = supabase
+    chatSubscriptionRef.current = supabase
       .channel(`public:messages:chat:${selectedChat.id}`)
       .on(
         "postgres_changes",
@@ -194,13 +228,15 @@ export default function MessagesPage() {
         },
         (payload) => {
           const newMessagePayload = payload.new as Message
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            { ...newMessagePayload, isMe: newMessagePayload.sender_id === user.id },
-          ])
-          // Mark as read if this user is the receiver
-          if (newMessagePayload.receiver_id === user.id) {
-            supabase.from("messages").update({ read: true }).eq("id", newMessagePayload.id).then()
+          if (mountedRef.current) {
+            setMessages((prevMessages) => [
+              ...prevMessages,
+              { ...newMessagePayload, isMe: newMessagePayload.sender_id === user.id },
+            ])
+            // Mark as read if this user is the receiver
+            if (newMessagePayload.receiver_id === user.id) {
+              supabase.from("messages").update({ read: true }).eq("id", newMessagePayload.id).then()
+            }
           }
         },
       )
@@ -213,17 +249,34 @@ export default function MessagesPage() {
           filter: `sender_id=eq.${user.id},receiver_id=eq.${selectedChat.id}`,
         },
         (payload) => {
-          // Handle messages sent by current user to update UI
           const newMessagePayload = payload.new as Message
-          setMessages((prevMessages) => [...prevMessages, { ...newMessagePayload, isMe: true }])
+          if (mountedRef.current) {
+            setMessages((prevMessages) => [...prevMessages, { ...newMessagePayload, isMe: true }])
+          }
         },
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(chatSubscription)
+      if (chatSubscriptionRef.current) {
+        supabase.removeChannel(chatSubscriptionRef.current)
+        chatSubscriptionRef.current = null
+      }
     }
   }, [selectedChat, user?.id, toast])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (conversationsSubscriptionRef.current) {
+        supabase.removeChannel(conversationsSubscriptionRef.current)
+      }
+      if (chatSubscriptionRef.current) {
+        supabase.removeChannel(chatSubscriptionRef.current)
+      }
+    }
+  }, [])
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -236,30 +289,35 @@ export default function MessagesPage() {
       content: newMessage.trim(),
     }
 
-    const { error } = await supabase.from("messages").insert(messageToSend)
+    try {
+      const { error } = await supabase.from("messages").insert(messageToSend)
 
-    if (error) {
-      console.error("Error sending message:", error)
+      if (error) {
+        console.error("Error sending message:", error)
+        toast({ title: "Error", description: "Could not send message.", variant: "destructive" })
+      } else {
+        setNewMessage("")
+        // Update conversation list optimistically
+        setConversations((prevConvs) =>
+          prevConvs
+            .map((c) =>
+              c.id === selectedChat.id
+                ? { ...c, lastMessage: { content: messageToSend.content, created_at: new Date().toISOString() } }
+                : c,
+            )
+            .sort((a, b) => {
+              if (!a.lastMessage) return 1
+              if (!b.lastMessage) return -1
+              return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+            }),
+        )
+      }
+    } catch (error) {
+      console.error("Error in sendMessage:", error)
       toast({ title: "Error", description: "Could not send message.", variant: "destructive" })
-    } else {
-      setNewMessage("")
-      // The subscription should pick up the new message and add it to the state.
-      // We also optimistically update the conversation list's last message.
-      setConversations((prevConvs) =>
-        prevConvs
-          .map((c) =>
-            c.id === selectedChat.id
-              ? { ...c, lastMessage: { content: messageToSend.content, created_at: new Date().toISOString() } }
-              : c,
-          )
-          .sort((a, b) => {
-            if (!a.lastMessage) return 1
-            if (!b.lastMessage) return -1
-            return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
-          }),
-      )
+    } finally {
+      setSendingMessage(false)
     }
-    setSendingMessage(false)
   }
 
   return (
@@ -288,7 +346,10 @@ export default function MessagesPage() {
           <ScrollArea className="flex-1">
             {loadingConversations ? (
               <div className="flex justify-center items-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Loading conversations...</p>
+                </div>
               </div>
             ) : conversations.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">No conversations yet.</div>
@@ -313,7 +374,6 @@ export default function MessagesPage() {
                         alt={conversation.profile.full_name}
                         className="h-12 w-12 rounded-full object-cover"
                       />
-                      {/* Add online status indicator if available */}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -361,7 +421,6 @@ export default function MessagesPage() {
                     />
                     <div>
                       <h2 className="font-semibold">{selectedChat.profile.full_name}</h2>
-                      {/* Add online status if available */}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -378,7 +437,10 @@ export default function MessagesPage() {
               <ScrollArea className="flex-1 p-4">
                 {loadingMessages ? (
                   <div className="flex justify-center items-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <div className="text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">Loading messages...</p>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
