@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import {
   BookOpenIcon,
@@ -44,6 +44,7 @@ import { NotificationsPopover } from "@/components/notifications-popover"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/components/ui/use-toast"
 
 const navigationItems = [
   {
@@ -87,8 +88,10 @@ const navigationItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { user, profile, signOut, loading: authLoading, authChecked } = useAuth()
   const { setTheme } = useTheme()
+  const { toast } = useToast()
 
   const [badges, setBadges] = useState({
     friendRequests: 0,
@@ -98,11 +101,20 @@ export function AppSidebar() {
   const [createPostOpen, setCreatePostOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
-
   const [loadingSignOut, setLoadingSignOut] = useState(false)
 
   useEffect(() => {
-    if (!user) return
+    if (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") {
+      return
+    }
+
+    if (!authChecked) {
+      return
+    }
+
+    if (!user) {
+      return
+    }
 
     const fetchBadgeData = async (type: keyof typeof badges) => {
       let query
@@ -131,14 +143,22 @@ export function AppSidebar() {
         default:
           return
       }
-      const { count } = await query
+      const { count, error } = await query
+
+      if (error) {
+        console.error(`Error fetching ${type}:`, error)
+        return
+      }
+
       setBadges((prev) => ({ ...prev, [type]: count || 0 }))
     }
 
+    // Fetch initial badge data
     fetchBadgeData("friendRequests")
     fetchBadgeData("unreadMessages")
     fetchBadgeData("notifications")
 
+    // Set up realtime subscriptions
     const channels = supabase
       .channel(`realtime-badges-${user.id}`)
       .on(
@@ -167,15 +187,45 @@ export function AppSidebar() {
     return () => {
       supabase.removeChannel(channels)
     }
-  }, [user])
+  }, [pathname, authChecked, user])
 
   const handleSignOut = async () => {
     setLoadingSignOut(true)
-    await signOut()
-    setLoadingSignOut(false)
+
+    try {
+      await signOut()
+      toast({
+        title: "Signed out successfully",
+        description: "You have been signed out of your account.",
+      })
+    } catch (error) {
+      console.error("Sign out error:", error)
+      toast({
+        title: "Sign out failed",
+        description: "An error occurred while signing out. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingSignOut(false)
+    }
   }
 
-  if (!authChecked || pathname === "/login" || pathname === "/signup") {
+  if (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") {
+    return null
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading your account...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
     return null
   }
 

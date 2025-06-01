@@ -17,32 +17,46 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState("student")
-  const { signIn } = useAuth()
+  const [activeTab, setActiveTab] = useState<Profile["user_type"]>("student")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { signIn, loading: authLoading } = useAuth()
   const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+
+    if (!email || !password) {
+      toast({
+        title: "Missing information",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
 
     try {
-      const userTypeForLogin = activeTab as Profile["user_type"]
-      await signIn(email, password, userTypeForLogin)
+      await signIn(email, password, activeTab)
+
       toast({
         title: "Welcome back! 🎉",
         description: "You've successfully logged in.",
       })
     } catch (error: any) {
+      console.error("Login error:", error)
+
       toast({
-        title: "Error",
-        description: error.message || "Failed to sign in",
+        title: "Login failed",
+        description: error.message || "Invalid email or password. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
+
+  const isLoading = isSubmitting || authLoading
 
   const getTabContent = (userType: string, icon: React.ReactNode, title: string, description: string) => (
     <div className="text-center mb-6">
@@ -66,7 +80,11 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as Profile["user_type"])}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="student" className="flex items-center gap-1 text-xs">
                 <GraduationCap className="h-3 w-3" />
@@ -120,7 +138,8 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                disabled={loading}
+                disabled={isLoading}
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -133,7 +152,8 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
@@ -141,7 +161,7 @@ export default function LoginPage() {
                   size="icon"
                   className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </Button>
@@ -149,7 +169,7 @@ export default function LoginPage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <input type="checkbox" id="remember" className="rounded" disabled={loading} />
+                <input type="checkbox" id="remember" className="rounded" disabled={isLoading} />
                 <Label htmlFor="remember" className="text-sm">
                   Remember me
                 </Label>
@@ -162,9 +182,9 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-              disabled={loading}
+              disabled={isLoading}
             >
-              {loading ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...
