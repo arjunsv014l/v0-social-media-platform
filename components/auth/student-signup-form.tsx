@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2 } from "lucide-react"
+import { Loader2, EyeIcon, EyeOffIcon } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -36,8 +36,10 @@ export default function StudentSignupForm() {
     graduationYear: "",
     studentId: "",
   })
-  const [loading, setLoading] = useState(false)
-  const { signUp } = useAuth()
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const { signUp, loading } = useAuth()
   const { toast } = useToast()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,19 +51,19 @@ export default function StudentSignupForm() {
   }
 
   const validateForm = () => {
-    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       toast({
         title: "Missing Information",
-        description: "Please enter your first and last name.",
+        description: "Please fill in all required fields.",
         variant: "destructive",
       })
       return false
     }
 
-    if (!formData.email.trim() || !formData.email.includes("@")) {
+    if (formData.password !== formData.confirmPassword) {
       toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
+        title: "Password Mismatch",
+        description: "Passwords do not match.",
         variant: "destructive",
       })
       return false
@@ -76,19 +78,11 @@ export default function StudentSignupForm() {
       return false
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
       toast({
-        title: "Passwords Don't Match",
-        description: "Please make sure your passwords match.",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    if (!formData.university || !formData.major || !formData.graduationYear) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
+        title: "Invalid Email",
+        description: "Please enter a valid email address.",
         variant: "destructive",
       })
       return false
@@ -102,34 +96,30 @@ export default function StudentSignupForm() {
 
     if (!validateForm()) return
 
-    setLoading(true)
-
     try {
-      console.log("StudentSignupForm: Attempting signup for:", formData.email)
-
-      await signUp(formData.email.trim(), formData.password, {
+      console.log("[StudentSignupForm] Starting registration...")
+      await signUp(formData.email, formData.password, {
         ...formData,
         userType: "student",
       })
 
       toast({
-        title: "Account Created! 🎉",
-        description: "Welcome to CampusConnect! Please complete your profile.",
+        title: "Registration Successful! 🎉",
+        description: "Welcome to CampusConnect! Redirecting to your dashboard...",
       })
     } catch (error: any) {
-      console.error("StudentSignupForm: Signup error:", error)
+      console.error("[StudentSignupForm] Registration error:", error)
       toast({
         title: "Registration Failed",
         description: error.message || "Failed to create account. Please try again.",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Name Fields */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="firstName">First Name *</Label>
@@ -157,6 +147,7 @@ export default function StudentSignupForm() {
         </div>
       </div>
 
+      {/* Email and Username */}
       <div className="space-y-2">
         <Label htmlFor="email">Email *</Label>
         <Input
@@ -178,72 +169,96 @@ export default function StudentSignupForm() {
           name="username"
           value={formData.username}
           onChange={handleChange}
-          placeholder="johndoe123"
+          placeholder="johndoe99"
           disabled={loading}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="password">Password *</Label>
+      {/* Password Fields */}
+      <div className="space-y-2">
+        <Label htmlFor="password">Password *</Label>
+        <div className="relative">
           <Input
             id="password"
             name="password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={formData.password}
             onChange={handleChange}
-            placeholder="••••••••"
+            placeholder="Enter your password"
             required
             disabled={loading}
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password *</Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            placeholder="••••••••"
-            required
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
+            onClick={() => setShowPassword(!showPassword)}
             disabled={loading}
-          />
+          >
+            {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="university">University *</Label>
-        <Select
-          value={formData.university}
-          onValueChange={(value) => handleSelectChange("university", value)}
-          disabled={loading}
-          required
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select your university" />
-          </SelectTrigger>
-          <SelectContent>
-            {universities.map((uni) => (
-              <SelectItem key={uni} value={uni}>
-                {uni}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label htmlFor="confirmPassword">Confirm Password *</Label>
+        <div className="relative">
+          <Input
+            id="confirmPassword"
+            name="confirmPassword"
+            type={showConfirmPassword ? "text" : "password"}
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            placeholder="Confirm your password"
+            required
+            disabled={loading}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2"
+            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+            disabled={loading}
+          >
+            {showConfirmPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
+      {/* University and Academic Info */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="major">Major *</Label>
+          <Label htmlFor="university">University</Label>
           <Select
+            name="university"
+            value={formData.university}
+            onValueChange={(value) => handleSelectChange("university", value)}
+            disabled={loading}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select university" />
+            </SelectTrigger>
+            <SelectContent>
+              {universities.map((uni) => (
+                <SelectItem key={uni} value={uni}>
+                  {uni}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="major">Major</Label>
+          <Select
+            name="major"
             value={formData.major}
             onValueChange={(value) => handleSelectChange("major", value)}
             disabled={loading}
-            required
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select your major" />
+              <SelectValue placeholder="Select major" />
             </SelectTrigger>
             <SelectContent>
               {majors.map((major) => (
@@ -254,13 +269,16 @@ export default function StudentSignupForm() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="graduationYear">Graduation Year *</Label>
+          <Label htmlFor="graduationYear">Graduation Year</Label>
           <Select
+            name="graduationYear"
             value={formData.graduationYear}
             onValueChange={(value) => handleSelectChange("graduationYear", value)}
             disabled={loading}
-            required
           >
             <SelectTrigger>
               <SelectValue placeholder="Select year" />
@@ -274,18 +292,17 @@ export default function StudentSignupForm() {
             </SelectContent>
           </Select>
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="studentId">Student ID (Optional)</Label>
-        <Input
-          id="studentId"
-          name="studentId"
-          value={formData.studentId}
-          onChange={handleChange}
-          placeholder="S1234567"
-          disabled={loading}
-        />
+        <div className="space-y-2">
+          <Label htmlFor="studentId">Student ID</Label>
+          <Input
+            id="studentId"
+            name="studentId"
+            value={formData.studentId}
+            onChange={handleChange}
+            placeholder="S1234567"
+            disabled={loading}
+          />
+        </div>
       </div>
 
       <Button

@@ -16,15 +16,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("student")
-  const { signIn } = useAuth()
+  const { signIn, loading } = useAuth()
   const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!email.trim() || !password) {
+    if (!email || !password) {
       toast({
         title: "Missing Information",
         description: "Please enter both email and password.",
@@ -33,25 +32,21 @@ export default function LoginPage() {
       return
     }
 
-    setLoading(true)
-
     try {
-      console.log("LoginPage: Attempting login for:", email)
-      await signIn(email.trim(), password)
+      console.log("[LoginPage] Attempting login for:", email)
+      await signIn(email, password)
 
       toast({
         title: "Welcome back! 🎉",
-        description: "You've successfully logged in.",
+        description: "You've successfully logged in. Redirecting to dashboard...",
       })
     } catch (error: any) {
-      console.error("LoginPage: Login error:", error)
+      console.error("[LoginPage] Login error:", error)
       toast({
         title: "Login Failed",
-        description: error.message || "Invalid email or password. Please try again.",
+        description: error.message || "Failed to sign in. Please check your credentials.",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
