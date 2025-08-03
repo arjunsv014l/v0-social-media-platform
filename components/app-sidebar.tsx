@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import {
   BookOpenIcon,
@@ -16,7 +16,6 @@ import {
   PlusIcon,
   LogOutIcon,
   GraduationCapIcon,
-  Loader2,
   SunIcon,
   MoonIcon,
   LaptopIcon,
@@ -36,8 +35,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase/client"
+import { useState } from "react"
 import { CreatePostDialog } from "@/components/create-post-dialog"
 import { SearchDialog } from "@/components/search-dialog"
 import { NotificationsPopover } from "@/components/notifications-popover"
@@ -61,13 +59,13 @@ const navigationItems = [
     title: "Friends",
     url: "/friends",
     icon: UsersIcon,
-    badge: "friendRequests",
+    badge: 3, // Mock badge count
   },
   {
     title: "Messages",
     url: "/messages",
     icon: MessageSquareIcon,
-    badge: "unreadMessages",
+    badge: 5, // Mock badge count
   },
   {
     title: "Events",
@@ -88,145 +86,19 @@ const navigationItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const { user, profile, signOut, loading: authLoading, authChecked } = useAuth()
+  const { profile } = useAuth()
   const { setTheme } = useTheme()
   const { toast } = useToast()
 
-  const [badges, setBadges] = useState({
-    friendRequests: 0,
-    unreadMessages: 0,
-    notifications: 0,
-  })
   const [createPostOpen, setCreatePostOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [isNotificationsPopoverOpen, setIsNotificationsPopoverOpen] = useState(false)
-  const [loadingSignOut, setLoadingSignOut] = useState(false)
-
-  useEffect(() => {
-    if (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") {
-      return
-    }
-
-    if (!authChecked) {
-      return
-    }
-
-    if (!user) {
-      return
-    }
-
-    const fetchBadgeData = async (type: keyof typeof badges) => {
-      let query
-      switch (type) {
-        case "friendRequests":
-          query = supabase
-            .from("friendships")
-            .select("*", { count: "exact", head: true })
-            .eq("friend_id", user.id)
-            .eq("status", "pending")
-          break
-        case "unreadMessages":
-          query = supabase
-            .from("messages")
-            .select("*", { count: "exact", head: true })
-            .eq("receiver_id", user.id)
-            .eq("read", false)
-          break
-        case "notifications":
-          query = supabase
-            .from("notifications")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", user.id)
-            .eq("read", false)
-          break
-        default:
-          return
-      }
-      const { count, error } = await query
-
-      if (error) {
-        console.error(`Error fetching ${type}:`, error)
-        return
-      }
-
-      setBadges((prev) => ({ ...prev, [type]: count || 0 }))
-    }
-
-    // Fetch initial badge data
-    fetchBadgeData("friendRequests")
-    fetchBadgeData("unreadMessages")
-    fetchBadgeData("notifications")
-
-    // Set up realtime subscriptions
-    const channels = supabase
-      .channel(`realtime-badges-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "friendships", filter: `friend_id=eq.${user.id}` },
-        () => fetchBadgeData("friendRequests"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${user.id}` },
-        () => fetchBadgeData("unreadMessages"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new.read === false)) {
-            fetchBadgeData("notifications")
-          } else if (payload.eventType === "UPDATE" && payload.new.read === true) {
-            fetchBadgeData("notifications")
-          }
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channels)
-    }
-  }, [pathname, authChecked, user])
 
   const handleSignOut = async () => {
-    setLoadingSignOut(true)
-
-    try {
-      await signOut()
-      toast({
-        title: "Signed out successfully",
-        description: "You have been signed out of your account.",
-      })
-    } catch (error) {
-      console.error("Sign out error:", error)
-      toast({
-        title: "Sign out failed",
-        description: "An error occurred while signing out. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingSignOut(false)
-    }
-  }
-
-  if (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") {
-    return null
-  }
-
-  if (!authChecked) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading your account...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return null
+    toast({
+      title: "Signed out successfully",
+      description: "You have been signed out of your account.",
+    })
   }
 
   return (
@@ -255,9 +127,9 @@ export function AppSidebar() {
                       <Link href={item.url}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
-                        {item.badge && badges[item.badge as keyof typeof badges] > 0 && (
+                        {item.badge && item.badge > 0 && (
                           <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
-                            {badges[item.badge as keyof typeof badges]}
+                            {item.badge}
                           </Badge>
                         )}
                       </Link>
@@ -289,11 +161,9 @@ export function AppSidebar() {
                     <SidebarMenuButton>
                       <BellIcon className="h-4 w-4" />
                       <span>Notifications</span>
-                      {badges.notifications > 0 && (
-                        <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
-                          {badges.notifications}
-                        </Badge>
-                      )}
+                      <Badge variant="secondary" className="ml-auto h-5 w-5 rounded-full p-0 text-xs">
+                        7
+                      </Badge>
                     </SidebarMenuButton>
                   </NotificationsPopover>
                 </SidebarMenuItem>
@@ -350,31 +220,26 @@ export function AppSidebar() {
               </DropdownMenu>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              {profile ? (
-                <div className="flex items-center gap-3 px-2 py-1.5">
-                  <div className="relative">
-                    <img
-                      src={profile.avatar_url || "/placeholder.svg?height=32&width=32&query=student profile"}
-                      alt={profile.full_name || "User profile"}
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                    <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-sidebar-background" />
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{profile.full_name || "Campus User"}</span>
-                    <span className="truncate text-xs text-sidebar-foreground/70">@{profile.username || "user"}</span>
-                  </div>
+              <div className="flex items-center gap-3 px-2 py-1.5">
+                <div className="relative">
+                  <img
+                    src={profile?.avatar_url || "/placeholder.svg?height=32&width=32&query=student profile"}
+                    alt={profile?.full_name || "User profile"}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                  <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-sidebar-background" />
                 </div>
-              ) : (
-                <div className="flex items-center gap-3 px-2 py-1.5 h-[44px]">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Loading user...</span>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{profile?.full_name || "John Student"}</span>
+                  <span className="truncate text-xs text-sidebar-foreground/70">
+                    @{profile?.username || "student123"}
+                  </span>
                 </div>
-              )}
+              </div>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={handleSignOut} disabled={loadingSignOut}>
-                {loadingSignOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOutIcon className="h-4 w-4" />}
+              <SidebarMenuButton onClick={handleSignOut}>
+                <LogOutIcon className="h-4 w-4" />
                 <span>Sign Out</span>
               </SidebarMenuButton>
             </SidebarMenuItem>

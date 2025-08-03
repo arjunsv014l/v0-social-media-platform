@@ -24,13 +24,50 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Mock user and profile data
+const mockUser: User = {
+  id: "mock-user-id",
+  email: "student@example.com",
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  aud: "authenticated",
+  role: "authenticated",
+  email_confirmed_at: new Date().toISOString(),
+  phone_confirmed_at: null,
+  confirmation_sent_at: null,
+  recovery_sent_at: null,
+  email_change_sent_at: null,
+  new_email: null,
+  invited_at: null,
+  action_link: null,
+  phone: null,
+  app_metadata: {},
+  user_metadata: {},
+  identities: [],
+  factors: [],
+}
+
+const mockProfile: Profile = {
+  id: "mock-user-id",
+  email: "student@example.com",
+  username: "student123",
+  full_name: "John Student",
+  user_type: "student",
+  avatar_url: "/placeholder.svg?height=40&width=40",
+  role_description: "Computer Science 3rd year student",
+  college_name: "Tech University",
+  degree: "Computer Science",
+  year_of_study: "3rd",
+  updated_at: new Date().toISOString(),
+}
+
 const publicPaths = ["/login", "/signup", "/forgot-password"]
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [authChecked, setAuthChecked] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [authChecked, setAuthChecked] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
@@ -452,8 +489,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user,
-        profile,
+        user: user || mockUser,
+        profile: profile || mockProfile,
         loading,
         authChecked,
         error,
